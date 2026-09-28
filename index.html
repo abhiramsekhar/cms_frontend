@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Clinic Management System — Manage patients, appointments, prescriptions, lab tests and billing.">
+  <title>Clinic CMS — Log in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/theme.css">
+</head>
+<body>
+  <div class="login-wrapper">
+    <!-- Floating decorative shapes -->
+    <div class="float-shape" style="width:200px;height:200px;background:#2dd4bf;top:20%;left:10%;animation:float 8s ease-in-out infinite"></div>
+    <div class="float-shape" style="width:150px;height:150px;background:#0ea5e9;top:60%;right:15%;animation:float 7s ease-in-out infinite 2s"></div>
+    <div class="float-shape" style="width:100px;height:100px;background:#8b5cf6;bottom:15%;left:30%;animation:float 9s ease-in-out infinite 4s"></div>
+
+    <div class="login">
+      <div class="login-logo">
+        <div class="logo-circle">🏥</div>
+        <h1>Clinic CMS</h1>
+        <p>Clinic Management System</p>
+      </div>
+
+      <form class="card" id="f" novalidate>
+        <label>Username
+          <input id="u" autocomplete="username" autofocus placeholder="Enter your username">
+        </label>
+        <label>Password
+          <input id="p" type="password" autocomplete="current-password" placeholder="Enter your password">
+        </label>
+        <small class="err" id="e"></small>
+        <button class="btn" style="width:100%">Log in</button>
+      </form>
+
+      <p class="hint">
+        Demo logins &mdash;
+        <strong>admin</strong> / admin123 &nbsp;·&nbsp;
+        <strong>doctor</strong> / doc123 &nbsp;·&nbsp;
+        <strong>recep</strong> / rec123 &nbsp;·&nbsp;
+        <strong>pharma</strong> / pha123 &nbsp;·&nbsp;
+        <strong>lab</strong> / lab123
+      </p>
+    </div>
+  </div>
+
+<script src="js/core.js"></script>
+<script>
+f.onsubmit = e => {
+  e.preventDefault();
+  try {
+    if (!u.value.trim() || !p.value) throw Error('Enter username and password');
+    CMS.login(u.value, p.value);
+    location.href = 'app.html';
+  } catch (x) {
+    document.getElementById('e').textContent = x.message;
+    // Shake animation on error
+    f.style.animation = 'none';
+    f.offsetHeight; // trigger reflow
+    f.style.animation = 'modalIn 0.3s ease-out';
+  }
+};
+</script>
+</body>
+</html>
