@@ -52,8 +52,7 @@ f.onsubmit = e => {
   e.preventDefault();
   try {
     if (!u.value.trim() || !p.value) throw Error('Enter username and password');
-    CMS.login(u.value, p.value);
-    location.href = 'app.html';
+    location.href = CMS.home[CMS.login(u.value, p.value).role];
   } catch (x) {
     document.getElementById('e').textContent = x.message;
     // Shake animation on error

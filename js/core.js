@@ -1,4 +1,5 @@
-const CMS={mods:{}};
+const CMS={mods:{},base:'',home:{ADMIN:'admin/dashboard.html',RECEPTIONIST:'reception/patients.html',DOCTOR:'doctor/my-appointments.html',PHARMACIST:'pharmacy/prescription-queue.html',LAB_TECH:'lab/lab-queue.html'}};
+CMS.slug=l=>l.toLowerCase().replace(/[^a-z]+/g,'-').replace(/^-|-$/g,'');
 (()=>{
 const K='cms_db_v1',P=(p,n)=>p+String(n).padStart(4,'0');
 const seed=()=>({
@@ -17,7 +18,7 @@ CMS.tx=fn=>{const s=JSON.stringify(db);try{const r=fn();save();return r}catch(e)
 CMS.today=()=>new Date().toLocaleDateString('en-CA');
 CMS.login=(u,p)=>{const x=db.users.find(x=>x.username===u.trim()&&x.password===p);if(!x)throw Error('Wrong username or password');if(!x.is_active)throw Error('This account is deactivated');sessionStorage.cms_u=x.id;return x};
 CMS.user=()=>CMS.get('users',sessionStorage.cms_u);
-CMS.logout=()=>{sessionStorage.removeItem('cms_u');location.href='index.html'};
+CMS.logout=()=>{sessionStorage.removeItem('cms_u');location.href=CMS.base+'index.html'};
 const esc=CMS.esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 CMS.V={
 name:v=>/^[A-Za-z][A-Za-z .'-]{1,59}$/.test(v)?'':'Use letters only (2–60 characters)',
@@ -64,12 +65,13 @@ el.querySelector('.search').oninput=e=>{const q=e.target.value.toLowerCase();el.
 if(o.btn)el.querySelector('[data-new]').onclick=o.btn[1];
 el.onclick=e=>{const b=e.target.closest('[data-a]');if(b&&o.on)try{o.on[b.dataset.a](b.dataset.id)}catch(x){CMS.toast(x.message,false)}}};
 
-CMS.boot=()=>{const u=CMS.user();if(!u||!u.is_active)return location.replace('index.html');
-const m=CMS.mods[u.role];
+CMS.boot=(role,i)=>{CMS.base='../';const u=CMS.user();if(!u||!u.is_active)return location.replace(CMS.base+'index.html');
+if(u.role!==role)return location.replace(CMS.base+CMS.home[u.role]);
+const m=CMS.mods[role];
 const roleIcon = ROLE_ICONS[u.role] || '👤';
 document.documentElement.dataset.role = u.role;
 
-document.getElementById('app').innerHTML=`<aside id="sidebar"><div class="sidebar-brand"><div class="logo-icon">🏥</div><h1>Clinic CMS<small>Management System</small></h1></div><nav>${m.map((x,i)=>`<a href="#${i}"><span class="nav-icon">${NAV_ICONS[x[0]]||'📄'}</span>${esc(x[0])}</a>`).join('')}</nav><div class="me"><div class="user-info"><div class="avatar">${initials(u.name)}</div><div class="user-details"><div class="user-name">${esc(u.name)}</div><div class="user-role">${roleIcon} ${esc(u.role.replace('_',' '))}</div></div></div><div class="sidebar-btns"><button class="btn ghost" id="th">☀️ Theme</button><button class="btn ghost" id="lo">🚪 Log out</button></div></div></aside><main id="v"></main>`;
+document.getElementById('app').innerHTML=`<aside id="sidebar"><div class="sidebar-brand"><div class="logo-icon">🏥</div><h1>Clinic CMS<small>Management System</small></h1></div><nav>${m.map((x,j)=>`<a href="${CMS.slug(x[0])}.html"${j===i?' class="on"':''}><span class="nav-icon">${NAV_ICONS[x[0]]||'📄'}</span>${esc(x[0])}</a>`).join('')}</nav><div class="me"><div class="user-info"><div class="avatar">${initials(u.name)}</div><div class="user-details"><div class="user-name">${esc(u.name)}</div><div class="user-role">${roleIcon} ${esc(u.role.replace('_',' '))}</div></div></div><div class="sidebar-btns"><button class="btn ghost" id="th">☀️ Theme</button><button class="btn ghost" id="lo">🚪 Log out</button></div></div></aside><main id="v"></main>`;
 
 document.getElementById('lo').onclick=CMS.logout;
 document.getElementById('th').onclick=()=>{const d=document.documentElement.dataset;d.t=d.t?'':'dark';localStorage.cms_t=d.t;
@@ -90,8 +92,6 @@ sidebar.querySelectorAll('nav a').forEach(a=>a.addEventListener('click',()=>{
   if(window.innerWidth<=860){sidebar.classList.remove('open');overlay.classList.remove('show')}
 }));
 
-const go=()=>{const i=Math.min(+location.hash.slice(1)||0,m.length-1);document.querySelectorAll('aside a').forEach((a,j)=>a.classList.toggle('on',i===j));
-const v=document.getElementById('v');v.style.animation='none';v.offsetHeight;v.style.animation='fadeIn 0.35s ease-out';
+const v=document.getElementById('v');v.style.animation='fadeIn 0.35s ease-out';
 m[i][1](v)};
-addEventListener('hashchange',go);go()};
 })();
