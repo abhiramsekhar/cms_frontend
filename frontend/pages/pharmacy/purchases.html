@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Purchase Orders — Clinova Healthcare</title>
+  <link rel="icon" type="image/svg+xml" href="../../assets/images/favicon.svg">
+  <link rel="stylesheet" href="../../assets/css/variables.css">
+  <link rel="stylesheet" href="../../assets/css/reset.css">
+  <link rel="stylesheet" href="../../assets/css/typography.css">
+  <link rel="stylesheet" href="../../assets/css/layout.css">
+  <link rel="stylesheet" href="../../assets/css/components.css">
+  <link rel="stylesheet" href="../../assets/css/forms.css">
+  <link rel="stylesheet" href="../../assets/css/tables.css">
+  <link rel="stylesheet" href="../../assets/css/utilities.css">
+  <link rel="stylesheet" href="../../assets/css/responsive.css">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script type="module">
+    import { initShell, getPageContent } from '../../components/app-shell.js';
+    import { DataTable, Format, Badge, Modal, Toast } from '../../components/ui.js';
+    import { pharmacy } from '../../api/pharmacy.js';
+    import { db } from '../../data/db.js';
+
+    let poTable;
+    let currentUser;
+    let newPoItems = [];
+
+    initShell(['PHARMACIST', 'ADMIN'], (session) => {
+      currentUser = session;
+      const page = getPageContent();
+      page.innerHTML = `
+        <div class="page-header">
+          <div class="page-header__info">
+            <h1 class="text-page-title">Purchase Orders</h1>
+          </div>
+          <div class="page-header__actions">
+            <button class="btn btn--primary" id="btn-create-po">
+              <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-plus"></use></svg>
+              Create PO
+            </button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: var(--sp-6);">
+          <div class="card__header" style="padding: var(--sp-3) var(--sp-4);">
+            <div class="form-group" style="margin:0;">
+              <select class="form-input" id="filter-status">
+                <option value="">All Statuses</option>
+                <option value="ORDERED">Ordered</option>
+                <option value="PARTIALLY_RECEIVED">Partially Received</option>
+                <option value="RECEIVED">Received</option>
+              </select>
+            </div>
+          </div>
+          <div id="po-table"></div>
+        </div>
+      `;
+
+      const columns = [
+        { key: 'id', label: 'PO ID', sortable: true, render: r => `<strong>${r.id.split('-').pop().toUpperCase()}</strong>` },
+        { key: 'createdAt', label: 'Date', sortable: true, render: r => Format.date(r.createdAt) },
+        { key: 'supplierId', label: 'Supplier', sortable: true, render: r => db.getById('suppliers', r.supplierId).name },
+        { key: 'items', label: 'Items', sortable: false, render: r => r.items.length + ' med(s)' },
+        { key: 'status', label: 'Status', sortable: true, render: r => Badge.status(r.status) },
+        { key: 'actions', label: '', width: '150px', render: r => {
+          if (r.status === 'ORDERED' || r.status === 'PARTIALLY_RECEIVED') {
+            return `
+              <button class="btn btn--primary btn--sm btn-receive" data-id="${r.id}">Receive Stock</button>
+            `;
+          }
+          return `<button class="btn btn--secondary btn--sm btn-view" data-id="${r.id}">View</button>`;
+        }}
+      ];
+
+      poTable = new DataTable('po-table', columns, [], { defaultSort: 'createdAt' });
+      poTable.sortAsc = false;
+      loadPOs();
+
+      document.getElementById('filter-status').addEventListener('change', loadPOs);
+      document.getElementById('btn-create-po').addEventListener('click', showCreatePO);
+      
+      document.getElementById('po-table').addEventListener('click', (e) => {
+        const receiveBtn = e.target.closest('.btn-receive');
+        if (receiveBtn) return showReceiveStock(receiveBtn.dataset.id);
+
+        const viewBtn = e.target.closest('.btn-view');
+        if (viewBtn) return showReceiveStock(viewBtn.dataset.id, true);
+      });
+
+      // Handle stock alert prefill
+      const params = new URLSearchParams(window.location.search);
+      const prefillMed = params.get('medId');
+      if (prefillMed) {
+        showCreatePO(prefillMed);
+      }
+    });
+
+    function loadPOs() {
+      const status = document.getElementById('filter-status').value;
+      let pos = pharmacy.listPurchases();
+      if (status) pos = pos.filter(p => p.status === status);
+      poTable.updateData(pos);
+    }
+
+    function showCreatePO(prefillMedId = null) {
+      newPoItems = [];
+      const meds = pharmacy.listMedicines().filter(m => m.isActive);
+      const suppliers = pharmacy.listSuppliers();
+
+      const renderItems = () => {
+        const list = document.getElementById('po-item-list');
+        if (newPoItems.length === 0) {
+          list.innerHTML = `<div class="text-caption">No medicines added to PO.</div>`;
+          return;
+        }
+        list.innerHTML = newPoItems.map((item, i) => `
+          <div style="display:flex; justify-content:space-between; padding:var(--sp-2); border:1px solid var(--border); margin-bottom:4px; border-radius:var(--radius-sm);">
+            <div><strong>${item.name}</strong> - Qty: ${item.quantity} @ ₹${Format.money(item.pricePerUnit)}</div>
+            <button class="btn btn--danger btn--sm btn--icon" type="button" onclick="window.removePoItem(${i})"><svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-x"></use></svg></button>
+          </div>
+        `).join('');
+      };
+      window.removePoItem = (i) => { newPoItems.splice(i, 1); renderItems(); };
+
+      const content = `
+        <div class="form-group">
+          <label class="form-group__label">Supplier *</label>
+          <select class="form-input" id="po-supplier">
+            <option value="">Select Supplier...</option>
+            ${suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+          </select>
+        </div>
+        
+        <div style="background:var(--bg-muted); padding:var(--sp-3); border-radius:var(--radius-md); margin-bottom:var(--sp-4);">
+          <div style="display:grid; grid-template-columns: 2fr 1fr 1fr auto; gap:var(--sp-3); align-items:end;">
+            <div class="form-group" style="margin:0;">
+              <label class="form-group__label">Medicine</label>
+              <select class="form-input" id="po-med">
+                <option value="">Select...</option>
+                ${meds.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label class="form-group__label">Qty</label>
+              <input type="number" class="form-input" id="po-qty" min="1" value="10">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label class="form-group__label">Price/Unit</label>
+              <input type="number" class="form-input" id="po-price" min="0.01" step="0.01">
+            </div>
+            <button class="btn btn--secondary" type="button" id="po-add-item">Add</button>
+          </div>
+        </div>
+        <div id="po-item-list"></div>
+      `;
+
+      const actions = `
+        <button class="btn btn--secondary" id="po-cancel">Cancel</button>
+        <button class="btn btn--primary" id="po-submit">Create PO</button>
+      `;
+
+      const m = Modal.show({ title: 'Create Purchase Order', content, size: 'lg', actions });
+      renderItems();
+
+      // Pre-fill if navigated from alerts
+      if (typeof prefillMedId === 'string' && document.getElementById('po-med')) {
+        document.getElementById('po-med').value = prefillMedId;
+      }
+
+      document.getElementById('po-cancel').addEventListener('click', m.close);
+      document.getElementById('po-add-item').addEventListener('click', () => {
+        const medId = document.getElementById('po-med').value;
+        const qty = parseInt(document.getElementById('po-qty').value);
+        const price = Math.round(parseFloat(document.getElementById('po-price').value) * 100);
+        
+        if (!medId || !qty || !price) {
+          Toast.show('Please fill medicine, quantity, and price.', 'error');
+          return;
+        }
+
+        const med = meds.find(m => m.id === medId);
+        newPoItems.push({ medicineId: med.id, name: med.name, quantity: qty, pricePerUnit: price });
+        renderItems();
+        document.getElementById('po-med').value = '';
+        document.getElementById('po-qty').value = '10';
+        document.getElementById('po-price').value = '';
+      });
+
+      document.getElementById('po-submit').addEventListener('click', () => {
+        const supplierId = document.getElementById('po-supplier').value;
+        if (!supplierId) return Toast.show('Supplier is required.', 'error');
+        if (newPoItems.length === 0) return Toast.show('Add at least one medicine.', 'error');
+
+        try {
+          pharmacy.createPurchaseOrder({ supplierId, items: newPoItems }, currentUser.staffId);
+          Toast.show('Purchase Order created.');
+          m.close();
+          loadPOs();
+          // Clear query params if any
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch(err) { Toast.show(err.message, 'error'); }
+      });
+    }
+
+    function showReceiveStock(id, readOnly = false) {
+      const po = db.getById('purchaseOrders', id);
+      const sup = db.getById('suppliers', po.supplierId);
+      
+      let rows = '';
+      po.items.forEach((item, i) => {
+        const med = db.getById('medicines', item.medicineId);
+        const pendingQty = item.quantityOrdered - item.quantityReceived;
+        
+        if (readOnly) {
+          rows += `
+            <tr>
+              <td style="padding:var(--sp-2); border-top:1px solid var(--border);">${med.name}</td>
+              <td style="padding:var(--sp-2); border-top:1px solid var(--border); text-align:center;">${item.quantityOrdered}</td>
+              <td style="padding:var(--sp-2); border-top:1px solid var(--border); text-align:center;">${item.quantityReceived}</td>
+            </tr>
+          `;
+        } else {
+          rows += `
+            <tr>
+              <td style="padding:var(--sp-2); border-top:1px solid var(--border);">
+                <strong>${med.name}</strong><br>
+                <span class="text-caption">Ordered: ${item.quantityOrdered} | Received: ${item.quantityReceived} | Pending: ${pendingQty}</span>
+                <input type="hidden" name="medId_${i}" value="${item.medicineId}">
+              </td>
+              <td style="padding:var(--sp-2); border-top:1px solid var(--border);">
+                <input type="number" class="form-input" name="qty_${i}" max="${pendingQty}" min="0" value="${pendingQty === 0 ? 0 : ''}" ${pendingQty === 0 ? 'disabled' : ''} placeholder="Qty">
+              </td>
+              <td style="padding:var(--sp-2); border-top:1px solid var(--border);">
+                <input type="date" class="form-input" name="exp_${i}" ${pendingQty === 0 ? 'disabled' : 'required'}>
+              </td>
+              <td style="padding:var(--sp-2); border-top:1px solid var(--border);">
+                <input type="text" class="form-input" name="batch_${i}" ${pendingQty === 0 ? 'disabled' : ''} placeholder="Auto">
+              </td>
+            </tr>
+          `;
+        }
+      });
+
+      const content = `
+        <div style="margin-bottom:var(--sp-4);">
+          <div class="text-caption">Supplier</div>
+          <div class="text-body"><strong>${sup.name}</strong></div>
+        </div>
+        <form id="recv-form">
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="padding:var(--sp-2); text-align:left;">Medicine</th>
+                ${readOnly ? `
+                  <th style="padding:var(--sp-2); text-align:center;">Ordered</th>
+                  <th style="padding:var(--sp-2); text-align:center;">Received</th>
+                ` : `
+                  <th style="padding:var(--sp-2); text-align:left; width:100px;">Receive Qty</th>
+                  <th style="padding:var(--sp-2); text-align:left; width:150px;">Expiry Date</th>
+                  <th style="padding:var(--sp-2); text-align:left; width:120px;">Batch No</th>
+                `}
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        </form>
+      `;
+
+      const actions = readOnly ? `<button class="btn btn--secondary" id="recv-cancel">Close</button>` : `
+        <button class="btn btn--secondary" id="recv-cancel">Cancel</button>
+        <button class="btn btn--primary" id="recv-submit" form="recv-form">Process Receipt</button>
+      `;
+
+      const m = Modal.show({ title: readOnly ? 'PO Details' : 'Receive Stock', content, size: 'lg', actions });
+      document.getElementById('recv-cancel').addEventListener('click', m.close);
+      
+      if (!readOnly) {
+        document.getElementById('recv-form').addEventListener('submit', (e) => {
+          e.preventDefault();
+          const f = e.target;
+          if (!f.checkValidity()) return f.reportValidity();
+
+          const receivedItems = [];
+          po.items.forEach((_, i) => {
+            const qtyInput = f[`qty_${i}`];
+            if (qtyInput && qtyInput.value) {
+              const qty = parseInt(qtyInput.value);
+              if (qty > 0) {
+                receivedItems.push({
+                  medicineId: f[`medId_${i}`].value,
+                  quantity: qty,
+                  expiryDate: f[`exp_${i}`].value,
+                  batchNumber: f[`batch_${i}`].value || null
+                });
+              }
+            }
+          });
+
+          if (receivedItems.length === 0) return Toast.show('Enter at least one quantity to receive.', 'error');
+
+          try {
+            pharmacy.receivePurchaseOrder(id, receivedItems, currentUser.staffId);
+            Toast.show('Stock received successfully.');
+            m.close();
+            loadPOs();
+          } catch(err) { Toast.show(err.message, 'error'); }
+        });
+      }
+    }
+  </script>
+</body>
+</html>

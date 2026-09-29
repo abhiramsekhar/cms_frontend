@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Appointments — Clinova Healthcare</title>
+  <link rel="icon" type="image/svg+xml" href="../../assets/images/favicon.svg">
+  <link rel="stylesheet" href="../../assets/css/variables.css">
+  <link rel="stylesheet" href="../../assets/css/reset.css">
+  <link rel="stylesheet" href="../../assets/css/typography.css">
+  <link rel="stylesheet" href="../../assets/css/layout.css">
+  <link rel="stylesheet" href="../../assets/css/components.css">
+  <link rel="stylesheet" href="../../assets/css/forms.css">
+  <link rel="stylesheet" href="../../assets/css/tables.css">
+  <link rel="stylesheet" href="../../assets/css/utilities.css">
+  <link rel="stylesheet" href="../../assets/css/responsive.css">
+  <style>
+    /* Booking Flow Wizard Styles */
+    .wizard-steps { display:flex; gap:var(--sp-2); margin-bottom:var(--sp-4); }
+    .wizard-step { flex:1; height:4px; background:var(--border); border-radius:2px; }
+    .wizard-step.is-active { background:var(--primary); }
+    .wizard-panel { display:none; }
+    .wizard-panel.is-active { display:block; }
+    
+    .time-slot-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(80px, 1fr)); gap:var(--sp-2); }
+    .time-slot { 
+      padding:var(--sp-2); text-align:center; border:1px solid var(--border); 
+      border-radius:var(--radius-sm); cursor:pointer; font-size:0.875rem; 
+    }
+    .time-slot:hover:not(.is-disabled) { border-color:var(--primary); background:var(--primary-light); }
+    .time-slot.is-selected { background:var(--primary); color:white; border-color:var(--primary); }
+    .time-slot.is-disabled { opacity:0.5; cursor:not-allowed; background:var(--bg); }
+  </style>
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script type="module">
+    import { initShell, getPageContent } from '../../components/app-shell.js';
+    import { DataTable, Format, Badge, Toast, Modal } from '../../components/ui.js';
+    import { appointments } from '../../api/appointments.js';
+    import { patients } from '../../api/patients.js';
+    import { db } from '../../data/db.js';
+
+    let apptTable;
+    let currentUser;
+
+    initShell(['RECEPTIONIST', 'ADMIN'], (session) => {
+      currentUser = session;
+      const page = getPageContent();
+      page.innerHTML = `
+        <div class="page-header">
+          <div class="page-header__info">
+            <h1 class="text-page-title">Appointments</h1>
+          </div>
+          <div class="page-header__actions">
+            <button class="btn btn--primary" id="btn-book">
+              <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-calendar-plus"></use></svg>
+              Book Appointment
+            </button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: var(--sp-6);">
+          <div class="card__header" style="padding: var(--sp-3) var(--sp-4); display:flex; gap:var(--sp-4); flex-wrap:wrap;">
+            <div class="search-bar" style="max-width: 300px; margin: 0;">
+              <span class="search-bar__icon"><svg class="icon icon--sm" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-search"></use></svg></span>
+              <input type="text" class="search-bar__input" id="appt-search" placeholder="Search patient, doctor...">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <input type="date" class="form-input" id="filter-date" value="${new Date().toISOString().split('T')[0]}">
+            </div>
+          </div>
+          <div id="appts-table"></div>
+        </div>
+      `;
+
+      // Setup Table
+      const columns = [
+        { key: 'tokenNumber', label: 'Token', width:'80px', sortable: true, render: r => `<strong>#${r.tokenNumber}</strong>` },
+        { key: 'time', label: 'Time', width:'100px', sortable: true, render: r => Format.time(r.time) },
+        { key: 'patientId', label: 'Patient', sortable: true, render: r => {
+          const p = db.getById('patients', r.patientId);
+          return `<strong>${p.name}</strong><br><span class="text-caption">${p.mrn}</span>`;
+        }},
+        { key: 'doctorId', label: 'Doctor', sortable: true, render: r => {
+          const d = db.getById('staff', r.doctorId);
+          const dept = db.getById('departments', d.departmentId);
+          return `${d.name}<br><span class="text-caption">${dept.name}</span>`;
+        }},
+        { key: 'status', label: 'Status', sortable: true, render: r => Badge.status(r.status) },
+        { key: 'actions', label: '', width: '120px', render: r => {
+          if (r.status === 'SCHEDULED') {
+            return `
+              <button class="btn btn--ghost btn--sm btn-checkin" data-id="${r.id}">Check In</button>
+              <button class="btn btn--danger btn--sm btn--icon btn-cancel" data-id="${r.id}" title="Cancel"><svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-x"></use></svg></button>
+            `;
+          }
+          return '';
+        }}
+      ];
+
+      apptTable = new DataTable('appts-table', columns, [], { searchInputId: 'appt-search', defaultSort: 'time' });
+      loadAppointments();
+
+      // Filters
+      document.getElementById('filter-date').addEventListener('change', loadAppointments);
+
+      // Book Button
+      document.getElementById('btn-book').addEventListener('click', showBookWizard);
+
+      // Actions Event Delegation
+      document.getElementById('appts-table').addEventListener('click', (e) => {
+        const checkinBtn = e.target.closest('.btn-checkin');
+        if (checkinBtn) {
+          handleCheckIn(checkinBtn.dataset.id);
+          return;
+        }
+        const cancelBtn = e.target.closest('.btn-cancel');
+        if (cancelBtn) {
+          handleCancel(cancelBtn.dataset.id);
+        }
+      });
+    });
+
+    function loadAppointments() {
+      const date = document.getElementById('filter-date').value;
+      const data = appointments.list({ date });
+      apptTable.updateData(data);
+    }
+
+    function handleCheckIn(id) {
+      try {
+        appointments.updateStatus(id, 'CHECKED_IN');
+        Toast.show('Patient checked in successfully.');
+        loadAppointments();
+      } catch (e) {
+        Toast.show(e.message, 'error');
+      }
+    }
+
+    function handleCancel(id) {
+      Modal.confirm({
+        title: 'Cancel Appointment',
+        message: 'Please provide a reason for cancellation.',
+        confirmText: 'Cancel Appointment',
+        confirmStyle: 'danger',
+        onConfirm: () => {
+          const reason = prompt('Reason for cancellation:');
+          if (!reason) throw new Error('Cancellation reason is required.');
+          appointments.cancel(id, reason, currentUser.staffName);
+          Toast.show('Appointment cancelled.');
+          loadAppointments();
+        }
+      });
+    }
+
+    // --- Booking Wizard ---
+    let wizardModal;
+    let bookData = { patientId: null, doctorId: null, date: null, time: null, type: 'New Visit' };
+
+    function showBookWizard() {
+      bookData = { patientId: null, doctorId: null, date: null, time: null, type: 'New Visit' };
+      const content = `
+        <div class="wizard-steps">
+          <div class="wizard-step is-active" id="step1-indicator"></div>
+          <div class="wizard-step" id="step2-indicator"></div>
+          <div class="wizard-step" id="step3-indicator"></div>
+        </div>
+
+        <!-- Step 1: Patient -->
+        <div class="wizard-panel is-active" id="step1-panel">
+          <p class="text-body-sm" style="margin-bottom:var(--sp-4);">Select a patient.</p>
+          <input type="text" class="form-input" id="wiz-patient-search" placeholder="Search name or MRN...">
+          <div id="wiz-patient-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);margin-top:var(--sp-2);border-radius:var(--radius-sm);"></div>
+        </div>
+
+        <!-- Step 2: Doctor -->
+        <div class="wizard-panel" id="step2-panel">
+          <p class="text-body-sm" style="margin-bottom:var(--sp-4);">Select a doctor.</p>
+          <div id="wiz-doctor-list" style="display:flex;flex-direction:column;gap:var(--sp-2);"></div>
+        </div>
+
+        <!-- Step 3: Date & Time -->
+        <div class="wizard-panel" id="step3-panel">
+          <div class="form-group">
+            <label class="form-group__label">Date</label>
+            <input type="date" class="form-input" id="wiz-date" min="${new Date().toISOString().split('T')[0]}" value="${new Date().toISOString().split('T')[0]}">
+          </div>
+          <div class="form-group">
+            <label class="form-group__label">Time Slot</label>
+            <div class="time-slot-grid" id="wiz-slots"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-group__label">Visit Type</label>
+            <select class="form-input" id="wiz-type">
+              <option value="New Visit">New Visit</option>
+              <option value="Follow-up">Follow-up</option>
+            </select>
+          </div>
+        </div>
+      `;
+
+      const actions = `
+        <button class="btn btn--secondary" id="wiz-back" style="visibility:hidden;">Back</button>
+        <button class="btn btn--primary" id="wiz-next" disabled>Next</button>
+      `;
+
+      wizardModal = Modal.show({ title: 'Book Appointment', content, actions, size: 'md' });
+      initWizardEvents();
+    }
+
+    function initWizardEvents() {
+      let currentStep = 1;
+      const btnNext = document.getElementById('wiz-next');
+      const btnBack = document.getElementById('wiz-back');
+
+      // Step 1 setup
+      const allPatients = db.getAll('patients');
+      const pList = document.getElementById('wiz-patient-list');
+      const renderPList = (query = '') => {
+        const q = query.toLowerCase();
+        const filtered = allPatients.filter(p => p.name.toLowerCase().includes(q) || p.mrn.toLowerCase().includes(q)).slice(0, 10);
+        pList.innerHTML = filtered.map(p => `
+          <div class="time-slot" style="text-align:left;border:none;border-bottom:1px solid var(--border);border-radius:0;" data-id="${p.id}">
+            <strong>${p.name}</strong> <span class="text-caption">(${p.mrn})</span>
+          </div>
+        `).join('');
+      };
+      renderPList();
+      document.getElementById('wiz-patient-search').addEventListener('input', e => renderPList(e.target.value));
+      pList.addEventListener('click', e => {
+        const row = e.target.closest('.time-slot');
+        if (row) {
+          bookData.patientId = row.dataset.id;
+          pList.querySelectorAll('.time-slot').forEach(el => el.classList.remove('is-selected'));
+          row.classList.add('is-selected');
+          btnNext.disabled = false;
+        }
+      });
+
+      // Step 2 setup
+      const allDoctors = db.getAll('staff').filter(s => s.role === 'DOCTOR' && s.isActive);
+      const dList = document.getElementById('wiz-doctor-list');
+      dList.innerHTML = allDoctors.map(d => {
+        const dept = db.getById('departments', d.departmentId);
+        return `
+          <div class="time-slot" style="text-align:left;display:flex;align-items:center;gap:var(--sp-3);" data-id="${d.id}">
+            <div class="avatar avatar--sm">${d.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
+            <div>
+              <strong>${d.name}</strong><br>
+              <span class="text-caption">${dept.name}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+      dList.addEventListener('click', e => {
+        const row = e.target.closest('.time-slot');
+        if (row) {
+          bookData.doctorId = row.dataset.id;
+          dList.querySelectorAll('.time-slot').forEach(el => el.classList.remove('is-selected'));
+          row.classList.add('is-selected');
+          btnNext.disabled = false;
+        }
+      });
+
+      // Step 3 setup
+      const renderSlots = () => {
+        const date = document.getElementById('wiz-date').value;
+        const slotsEl = document.getElementById('wiz-slots');
+        if (!date || !bookData.doctorId) return;
+
+        // Get booked slots for this doctor+date
+        const booked = db.getAll('appointments')
+          .filter(a => a.doctorId === bookData.doctorId && a.date === date && a.status !== 'CANCELLED')
+          .map(a => a.time);
+        
+        // Generate slots 09:00 to 17:00 every 30 mins
+        const slots = [];
+        for (let h=9; h<17; h++) {
+          slots.push(`${String(h).padStart(2,'0')}:00`, `${String(h).padStart(2,'0')}:30`);
+        }
+
+        // Disable past slots if today
+        const today = new Date().toISOString().split('T')[0];
+        const nowHour = new Date().getHours();
+        const nowMin = new Date().getMinutes();
+
+        slotsEl.innerHTML = slots.map(time => {
+          const [th, tm] = time.split(':').map(Number);
+          let isPast = false;
+          if (date === today && (th < nowHour || (th === nowHour && tm <= nowMin))) isPast = true;
+          
+          const isBooked = booked.includes(time);
+          const disabled = isPast || isBooked;
+          
+          return `<div class="time-slot ${disabled ? 'is-disabled' : ''}" data-time="${time}">${Format.time(time)}</div>`;
+        }).join('');
+      };
+
+      document.getElementById('wiz-date').addEventListener('change', renderSlots);
+      document.getElementById('wiz-slots').addEventListener('click', e => {
+        const slot = e.target.closest('.time-slot');
+        if (slot && !slot.classList.contains('is-disabled')) {
+          bookData.time = slot.dataset.time;
+          bookData.date = document.getElementById('wiz-date').value;
+          document.getElementById('wiz-slots').querySelectorAll('.time-slot').forEach(el => el.classList.remove('is-selected'));
+          slot.classList.add('is-selected');
+          btnNext.disabled = false;
+        }
+      });
+      document.getElementById('wiz-type').addEventListener('change', e => bookData.type = e.target.value);
+
+      // Nav logic
+      const showStep = (step) => {
+        document.querySelectorAll('.wizard-step').forEach((el, i) => el.classList.toggle('is-active', i < step));
+        document.querySelectorAll('.wizard-panel').forEach((el, i) => el.classList.toggle('is-active', i === step - 1));
+        btnBack.style.visibility = step > 1 ? 'visible' : 'hidden';
+        
+        if (step === 1) btnNext.disabled = !bookData.patientId;
+        if (step === 2) btnNext.disabled = !bookData.doctorId;
+        if (step === 3) {
+          btnNext.disabled = !bookData.time;
+          btnNext.textContent = 'Confirm Booking';
+          renderSlots();
+        } else {
+          btnNext.textContent = 'Next';
+        }
+      };
+
+      btnNext.addEventListener('click', () => {
+        if (currentStep < 3) {
+          currentStep++;
+          showStep(currentStep);
+        } else {
+          // Final Submit
+          try {
+            btnNext.disabled = true;
+            appointments.book(bookData, currentUser.staffId);
+            Toast.show('Appointment booked successfully.');
+            wizardModal.close();
+            // Automatically switch list filter to the booked date
+            document.getElementById('filter-date').value = bookData.date;
+            loadAppointments();
+          } catch(err) {
+            Toast.show(err.message, 'error');
+            btnNext.disabled = false;
+          }
+        }
+      });
+
+      btnBack.addEventListener('click', () => {
+        if (currentStep > 1) {
+          currentStep--;
+          showStep(currentStep);
+        }
+      });
+    }
+  </script>
+</body>
+</html>

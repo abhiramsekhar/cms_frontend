@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign In — Clinova Healthcare</title>
+  <meta name="description" content="Sign in to Clinova Healthcare Clinic Management System">
+  <link rel="icon" type="image/svg+xml" href="../../assets/images/favicon.svg">
+  <link rel="stylesheet" href="../../assets/css/variables.css">
+  <link rel="stylesheet" href="../../assets/css/reset.css">
+  <link rel="stylesheet" href="../../assets/css/typography.css">
+  <link rel="stylesheet" href="../../assets/css/layout.css">
+  <link rel="stylesheet" href="../../assets/css/components.css">
+  <link rel="stylesheet" href="../../assets/css/forms.css">
+  <link rel="stylesheet" href="../../assets/css/responsive.css">
+  <style>
+    /* Login-specific styles — minimal, extends the design system */
+    .login-visual__inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: var(--navy-900);
+      color: var(--surface);
+      text-align: center;
+      padding: var(--sp-8);
+      position: relative;
+      overflow: hidden;
+    }
+    .login-visual__hero {
+      position: absolute;
+      inset: 0;
+      opacity: 0.12;
+    }
+    .login-visual__hero img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .login-visual__content {
+      position: relative;
+      z-index: 1;
+    }
+    .login-visual__logo {
+      width: 64px;
+      height: 64px;
+      margin-bottom: var(--sp-4);
+    }
+    .login-visual__name {
+      font-size: 1.75rem;
+      font-weight: 600;
+      margin-bottom: var(--sp-2);
+      color: #FFFFFF;
+    }
+    .login-visual__tagline {
+      font-size: 1rem;
+      font-weight: 400;
+      opacity: 0.9;
+      color: #D9ECEB;
+      letter-spacing: 0.04em;
+    }
+    .login-form__logo-mobile {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-8);
+    }
+    .login-form__logo-mobile img { width: 36px; height: auto; }
+    .login-form__logo-mobile span { font-size: 1.25rem; font-weight: 600; color: var(--navy-900); }
+    @media (min-width: 1024px) {
+      .login-form__logo-mobile { display: none; }
+    }
+    .demo-accounts {
+      margin-top: var(--sp-6);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    .demo-accounts__toggle {
+      width: 100%;
+      padding: var(--sp-3) var(--sp-4);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--muted);
+      background: var(--bg);
+      cursor: pointer;
+      border: none;
+    }
+    .demo-accounts__toggle:hover { background: var(--hover-bg); }
+    .demo-accounts__toggle svg { transition: transform var(--transition-fast); }
+    .demo-accounts__toggle.is-open svg { transform: rotate(180deg); }
+    .demo-accounts__list {
+      display: none;
+      border-top: 1px solid var(--border);
+    }
+    .demo-accounts__list.is-open { display: block; }
+    .demo-account {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-1);
+      padding: var(--sp-2) var(--sp-4);
+      font-size: 0.8125rem;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background var(--transition-fast);
+    }
+    .demo-account:last-child { border-bottom: none; }
+    .demo-account:hover { background: var(--hover-bg); }
+    .demo-account__role {
+      font-weight: 500;
+      color: var(--text);
+      min-width: 100px;
+    }
+    .demo-account__creds {
+      color: var(--muted);
+      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-layout">
+    <!-- Left visual panel -->
+    <div class="login-layout__visual">
+      <div class="login-visual__inner">
+        <div class="login-visual__hero">
+          <img src="../../assets/images/login/hero-placeholder.svg" alt="" aria-hidden="true" style="opacity:0.2;">
+        </div>
+        <div class="login-visual__content">
+          <img src="../../assets/images/logo-mark.svg" alt="" class="login-visual__logo" aria-hidden="true">
+          <div class="login-visual__name">Clinova Healthcare</div>
+          <div class="login-visual__tagline">Care. Precision. Trust.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right form panel -->
+    <div class="login-layout__form">
+      <div class="login-form-wrapper">
+        <div class="login-form__logo-mobile">
+          <img src="../../assets/images/logo-mark.svg" alt="Clinova">
+          <span>Clinova Healthcare</span>
+        </div>
+
+        <h1 class="text-page-title" style="margin-bottom: var(--sp-1);">Welcome back</h1>
+        <p class="text-caption" style="margin-bottom: var(--sp-6);">Sign in to your account to continue</p>
+
+        <!-- Error banner (hidden by default) -->
+        <div class="form-banner form-banner--error" id="login-error" style="display:none;">
+          <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-alert-circle"></use></svg>
+          <span id="login-error-text"></span>
+        </div>
+
+        <!-- Session expired notice -->
+        <div class="form-banner form-banner--success" id="session-expired" style="display:none;">
+          <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-info"></use></svg>
+          <span>Your session has expired. Please sign in again.</span>
+        </div>
+
+        <form id="login-form" autocomplete="on" novalidate>
+          <div class="form-group" style="margin-bottom: var(--sp-4);">
+            <label class="form-group__label" for="username">Username</label>
+            <input type="text" class="form-input" id="username" name="username"
+                   placeholder="Enter your username" autocomplete="username" required>
+          </div>
+
+          <div class="form-group" style="margin-bottom: var(--sp-6);">
+            <label class="form-group__label" for="password">Password</label>
+            <div class="form-password">
+              <input type="password" class="form-input" id="password" name="password"
+                     placeholder="Enter your password" autocomplete="current-password" required>
+              <button type="button" class="form-password__toggle" id="toggle-password" aria-label="Show password">
+                <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-eye"></use></svg>
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn--primary btn--lg" style="width:100%;" id="login-btn">
+            Sign in
+          </button>
+        </form>
+
+        <!-- Demo accounts collapsible -->
+        <div class="demo-accounts" id="demo-accounts">
+          <button class="demo-accounts__toggle" id="demo-toggle" type="button">
+            <span>Demo Accounts</span>
+            <svg class="icon icon--sm" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-chevron-down"></use></svg>
+          </button>
+          <div class="demo-accounts__list" id="demo-list">
+            <div class="demo-account" data-user="admin"       data-pass="Admin@123">
+              <span class="demo-account__role">Admin</span>
+              <span class="demo-account__creds">admin / Admin@123</span>
+            </div>
+            <div class="demo-account" data-user="dr.sarah"    data-pass="Doctor@123">
+              <span class="demo-account__role">Doctor</span>
+              <span class="demo-account__creds">dr.sarah / Doctor@123</span>
+            </div>
+            <div class="demo-account" data-user="reception1"  data-pass="Reception@123">
+              <span class="demo-account__role">Receptionist</span>
+              <span class="demo-account__creds">reception1 / Reception@123</span>
+            </div>
+            <div class="demo-account" data-user="pharmacy1"   data-pass="Pharmacy@123">
+              <span class="demo-account__role">Pharmacist</span>
+              <span class="demo-account__creds">pharmacy1 / Pharmacy@123</span>
+            </div>
+            <div class="demo-account" data-user="lab1"         data-pass="Lab@123">
+              <span class="demo-account__role">Lab Tech</span>
+              <span class="demo-account__creds">lab1 / Lab@123</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { auth } from '../../api/auth.js';
+    import { session } from '../../core/session.js';
+    import { seed, isSeeded } from '../../data/seed.js';
+    import { getDashboardPath } from '../../core/guard.js';
+
+    // If already logged in, redirect to dashboard
+    const existing = session.get();
+    if (existing) {
+      window.location.replace('../../' + getDashboardPath(existing.role));
+    }
+
+    // Auto-seed if not seeded
+    if (!isSeeded()) {
+      document.getElementById('login-btn').textContent = 'Loading demo data…';
+      document.getElementById('login-btn').disabled = true;
+      await seed();
+      document.getElementById('login-btn').textContent = 'Sign in';
+      document.getElementById('login-btn').disabled = false;
+    }
+
+    // Show session expired notice
+    if (new URLSearchParams(window.location.search).has('expired')) {
+      document.getElementById('session-expired').style.display = 'flex';
+    }
+
+    // Form submission
+    const form = document.getElementById('login-form');
+    const errorBanner = document.getElementById('login-error');
+    const errorText = document.getElementById('login-error-text');
+    const loginBtn = document.getElementById('login-btn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBanner.style.display = 'none';
+
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!username || !password) {
+        errorText.textContent = 'Please enter both username and password.';
+        errorBanner.style.display = 'flex';
+        return;
+      }
+
+      loginBtn.disabled = true;
+      loginBtn.innerHTML = '<span class="btn__spinner"></span> Signing in…';
+
+      try {
+        const result = await auth.login(username, password);
+        // Redirect to role dashboard
+        window.location.href = '../../' + getDashboardPath(result.user.role);
+      } catch (err) {
+        errorText.textContent = err.message || 'An error occurred. Please try again.';
+        errorBanner.style.display = 'flex';
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Sign in';
+      }
+    });
+
+    // Password toggle
+    const toggleBtn = document.getElementById('toggle-password');
+    const passwordInput = document.getElementById('password');
+    toggleBtn.addEventListener('click', () => {
+      const isPassword = passwordInput.type === 'password';
+      passwordInput.type = isPassword ? 'text' : 'password';
+      toggleBtn.innerHTML = `<svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-eye${isPassword ? '-off' : ''}"></use></svg>`;
+    });
+
+    // Demo accounts toggle
+    const demoToggle = document.getElementById('demo-toggle');
+    const demoList = document.getElementById('demo-list');
+    demoToggle.addEventListener('click', () => {
+      demoToggle.classList.toggle('is-open');
+      demoList.classList.toggle('is-open');
+    });
+
+    // Demo account click
+    demoList.addEventListener('click', (e) => {
+      const account = e.target.closest('.demo-account');
+      if (!account) return;
+      document.getElementById('username').value = account.dataset.user;
+      document.getElementById('password').value = account.dataset.pass;
+    });
+  </script>
+</body>
+</html>

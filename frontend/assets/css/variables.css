@@ -4,40 +4,47 @@
 
 :root {
   /* ── Brand Colors ── */
-  --navy-900: #123B5D;
-  --navy-800: #1A4D73;
-  --navy-700: #1F5F8A;
-  --navy-100: #D6E4F0;
-  --navy-50:  #EBF1F7;
+  --navy-900: #05668D; /* Deep Teal */
+  --navy-800: #028090; /* Ocean Teal */
+  --navy-700: #00A896; /* Clinical Teal */
+  --navy-100: #D9ECEB;
+  --navy-50:  #E8F6F3;
 
-  --teal-700: #117070;
-  --teal-600: #168C8C;
-  --teal-500: #1AA3A3;
+  --teal-700: #028090;
+  --teal-600: #00A896;
+  --teal-500: #02C39A; /* Bright Turquoise */
   --teal-100: #C8ECEC;
-  --teal-50:  #E8F5F5;
+  --teal-50:  #F0F3BD; /* Soft Lime */
+
+  /* Aliases for missing vars */
+  --primary: var(--navy-900);
+  --primary-light: var(--navy-800);
+  --warning-dark: #A47018;
+  --border-light: #E8F0EF;
+  --bg-hover: #EEF7F5;
 
   /* ── Neutral Palette ── */
-  --bg:       #F5F8FA;
+  --bg:       #F6FAF9;
   --surface:  #FFFFFF;
-  --text:     #1F2937;
-  --text-secondary: #374151;
-  --muted:    #64748B;
+  --text:     #17343A;
+  --text-secondary: #587276;
+  --muted:    #819496;
   --muted-light: #94A3B8;
-  --border:   #E2E8F0;
-  --border-strong: #CBD5E1;
-  --hover-bg: #F1F5F9;
+  --border:   #D7E7E5;
+  --border-strong: #B0C4C1;
+  --hover-bg: #EEF7F5;
 
   /* ── Semantic Colors ── */
-  --success:       #16845B;
-  --success-light: #ECFDF5;
-  --success-border:#A7F3D0;
-  --warning:       #C98916;
+  --success:       #2E8B72;
+  --success-light: #E7F3F0;
+  --success-border:#A8D5C8;
+  --warning:       #C58B24;
   --warning-light: #FFFBEB;
   --warning-border:#FDE68A;
-  --danger:        #C24141;
+  --danger:        #C95C5C;
   --danger-light:  #FEF2F2;
   --danger-border: #FECACA;
-  --info:          #168C8C;
+  --info:          #028090;
   --info-light:    #E8F5F5;
   --info-border:   #C8ECEC;
 

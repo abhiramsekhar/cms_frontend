@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Suppliers — Clinova Healthcare</title>
+  <link rel="icon" type="image/svg+xml" href="../../assets/images/favicon.svg">
+  <link rel="stylesheet" href="../../assets/css/variables.css">
+  <link rel="stylesheet" href="../../assets/css/reset.css">
+  <link rel="stylesheet" href="../../assets/css/typography.css">
+  <link rel="stylesheet" href="../../assets/css/layout.css">
+  <link rel="stylesheet" href="../../assets/css/components.css">
+  <link rel="stylesheet" href="../../assets/css/forms.css">
+  <link rel="stylesheet" href="../../assets/css/tables.css">
+  <link rel="stylesheet" href="../../assets/css/utilities.css">
+  <link rel="stylesheet" href="../../assets/css/responsive.css">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script type="module">
+    import { initShell, getPageContent } from '../../components/app-shell.js';
+    import { DataTable, Modal, Toast } from '../../components/ui.js';
+    import { pharmacy } from '../../api/pharmacy.js';
+
+    let supTable;
+
+    initShell(['PHARMACIST', 'ADMIN'], () => {
+      const page = getPageContent();
+      page.innerHTML = `
+        <div class="page-header">
+          <div class="page-header__info">
+            <h1 class="text-page-title">Suppliers Directory</h1>
+          </div>
+          <div class="page-header__actions">
+            <button class="btn btn--primary" id="btn-add-sup">
+              <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-plus"></use></svg>
+              Add Supplier
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__header" style="padding: var(--sp-3) var(--sp-4);">
+            <div class="search-bar" style="max-width: 300px; margin: 0;">
+              <span class="search-bar__icon"><svg class="icon icon--sm" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-search"></use></svg></span>
+              <input type="text" class="search-bar__input" id="sup-search" placeholder="Search suppliers...">
+            </div>
+          </div>
+          <div id="sup-table"></div>
+        </div>
+      `;
+
+      const columns = [
+        { key: 'name', label: 'Supplier Name', sortable: true, render: r => `<strong>${r.name}</strong>` },
+        { key: 'contactPerson', label: 'Contact Person', sortable: true },
+        { key: 'phone', label: 'Phone', sortable: false },
+        { key: 'email', label: 'Email', sortable: false },
+        { key: 'typicalMedicines', label: 'Medicines Supplied', sortable: false, render: r => {
+          if (!r.typicalMedicines || !r.typicalMedicines.length) return '-';
+          return `<div style="display:flex; flex-wrap:wrap; gap:4px;">${r.typicalMedicines.map(mId => {
+            try { return `<span class="badge badge--neutral">${db.getById('medicines', mId).name}</span>`; }
+            catch(e){ return ''; }
+          }).join('')}</div>`;
+        } },
+        { key: 'actions', label: '', width: '80px', render: r => `
+          <button class="btn btn--secondary btn--sm btn-edit" data-id="${r.id}">Edit</button>
+        `}
+      ];
+
+      supTable = new DataTable('sup-table', columns, pharmacy.listSuppliers(), { searchInputId: 'sup-search', defaultSort: 'name' });
+      supTable.sortAsc = true;
+      supTable.render();
+
+      document.getElementById('btn-add-sup').addEventListener('click', () => showForm());
+      
+      document.getElementById('sup-table').addEventListener('click', (e) => {
+        const editBtn = e.target.closest('.btn-edit');
+        if (editBtn) {
+          const sup = pharmacy.listSuppliers().find(s => s.id === editBtn.dataset.id);
+          showForm(sup);
+        }
+      });
+    });
+
+    function showForm(sup = null) {
+      const content = `
+        <form id="sup-form" style="display:flex;flex-direction:column;gap:var(--sp-4);">
+          <div class="form-group">
+            <label class="form-group__label">Supplier Name *</label>
+            <input type="text" class="form-input" name="name" value="${sup ? sup.name : ''}" required>
+          </div>
+          <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
+            <div class="form-group">
+              <label class="form-group__label">Contact Person *</label>
+              <input type="text" class="form-input" name="contactPerson" value="${sup ? sup.contactPerson : ''}" required>
+            </div>
+            <div class="form-group">
+              <label class="form-group__label">Phone *</label>
+              <input type="tel" class="form-input" name="phone" value="${sup ? sup.phone : ''}" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-group__label">Email</label>
+            <input type="email" class="form-input" name="email" value="${sup ? (sup.email || '') : ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-group__label">Medicines Supplied (comma-separated IDs)</label>
+            <textarea class="form-input" name="typicalMedicines" rows="3">${sup && sup.typicalMedicines ? sup.typicalMedicines.join(', ') : ''}</textarea>
+          </div>
+        </form>
+      `;
+
+      const actions = `
+        <button class="btn btn--secondary" id="sup-cancel">Cancel</button>
+        <button class="btn btn--primary" id="sup-submit" form="sup-form">Save Supplier</button>
+      `;
+
+      const m = Modal.show({ title: sup ? 'Edit Supplier' : 'Add Supplier', content, size: 'md', actions });
+
+      document.getElementById('sup-cancel').addEventListener('click', m.close);
+      document.getElementById('sup-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const f = e.target;
+        if (!f.checkValidity()) return f.reportValidity();
+
+        try {
+          pharmacy.saveSupplier({
+            id: sup ? sup.id : null,
+            name: f.name.value.trim(),
+            contactPerson: f.contactPerson.value.trim(),
+            phone: f.phone.value.trim(),
+            email: f.email.value.trim(),
+            typicalMedicines: f.typicalMedicines.value.split(',').map(s => s.trim()).filter(Boolean)
+          });
+          Toast.show('Supplier saved successfully.');
+          supTable.updateData(pharmacy.listSuppliers());
+          m.close();
+        } catch(err) {
+          Toast.show(err.message, 'error');
+        }
+      });
+    }
+  </script>
+</body>
+</html>

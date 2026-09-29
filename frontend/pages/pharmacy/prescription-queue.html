@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prescription Queue — Clinova Healthcare</title>
+  <link rel="icon" type="image/svg+xml" href="../../assets/images/favicon.svg">
+  <link rel="stylesheet" href="../../assets/css/variables.css">
+  <link rel="stylesheet" href="../../assets/css/reset.css">
+  <link rel="stylesheet" href="../../assets/css/typography.css">
+  <link rel="stylesheet" href="../../assets/css/layout.css">
+  <link rel="stylesheet" href="../../assets/css/components.css">
+  <link rel="stylesheet" href="../../assets/css/forms.css">
+  <link rel="stylesheet" href="../../assets/css/tables.css">
+  <link rel="stylesheet" href="../../assets/css/utilities.css">
+  <link rel="stylesheet" href="../../assets/css/responsive.css">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script type="module">
+    import { initShell, getPageContent } from '../../components/app-shell.js';
+    import { DataTable, Format, Badge, Modal, Toast } from '../../components/ui.js';
+    import { pharmacy } from '../../api/pharmacy.js';
+    import { db } from '../../data/db.js';
+
+    let rxTable;
+    let currentUser;
+
+    initShell(['PHARMACIST'], (session) => {
+      currentUser = session;
+      const page = getPageContent();
+      
+      page.innerHTML = `
+        <div class="page-header">
+          <div class="page-header__info">
+            <h1 class="text-page-title">Prescription Queue</h1>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: var(--sp-6);">
+          <div class="card__header" style="padding: var(--sp-3) var(--sp-4);">
+            <div class="search-bar" style="max-width: 300px; margin: 0;">
+              <span class="search-bar__icon"><svg class="icon icon--sm" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-search"></use></svg></span>
+              <input type="text" class="search-bar__input" id="rx-search" placeholder="Search patient...">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <select class="form-input" id="filter-status">
+                <option value="PENDING">Pending (Queue)</option>
+                <option value="DISPENSED">Dispensed</option>
+                <option value="CANCELLED">Cancelled/Rejected</option>
+                <option value="">All Statuses</option>
+              </select>
+            </div>
+          </div>
+          <div id="rx-table"></div>
+        </div>
+      `;
+
+      // Setup Table
+      const columns = [
+        { key: 'createdAt', label: 'Time', width: '100px', sortable: true, render: r => Format.time(r.createdAt.split('T')[1].slice(0,5)) },
+        { key: 'date', label: 'Date', width: '120px', sortable: true, render: r => Format.date(r.createdAt) },
+        { key: 'patientId', label: 'Patient', sortable: true, render: r => {
+          const p = db.getById('patients', r.patientId);
+          return `<strong>${p.name}</strong><br><span class="text-caption">${p.mrn}</span>`;
+        }},
+        { key: 'doctorId', label: 'Doctor', sortable: true, render: r => db.getById('staff', r.doctorId).name },
+        { key: 'items', label: 'Items', sortable: false, render: r => r.items.length + ' med(s)' },
+        { key: 'status', label: 'Status', sortable: true, render: r => Badge.status(r.status) },
+        { key: 'actions', label: '', width: '150px', render: r => {
+          if (r.status === 'PENDING') {
+            return `
+              <button class="btn btn--primary btn--sm btn-dispense" data-id="${r.id}">Dispense</button>
+              <button class="btn btn--danger btn--sm btn--icon btn-reject" data-id="${r.id}" title="Reject" style="margin-left:4px;"><svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-x"></use></svg></button>
+            `;
+          }
+          return `<button class="btn btn--secondary btn--sm btn-view" data-id="${r.id}">View</button>`;
+        }}
+      ];
+
+      // Default sort for Pending queue is oldest first (ascending)
+      rxTable = new DataTable('rx-table', columns, [], { searchInputId: 'rx-search', defaultSort: 'createdAt' });
+      rxTable.sortAsc = true; 
+      loadQueue();
+
+      document.getElementById('filter-status').addEventListener('change', (e) => {
+        rxTable.sortAsc = e.target.value === 'PENDING';
+        loadQueue();
+      });
+
+      document.getElementById('rx-table').addEventListener('click', (e) => {
+        const dispenseBtn = e.target.closest('.btn-dispense');
+        if (dispenseBtn) return handleDispense(dispenseBtn.dataset.id);
+
+        const rejectBtn = e.target.closest('.btn-reject');
+        if (rejectBtn) return handleReject(rejectBtn.dataset.id);
+
+        const viewBtn = e.target.closest('.btn-view');
+        if (viewBtn) return handleView(viewBtn.dataset.id);
+      });
+    });
+
+    function loadQueue() {
+      const status = document.getElementById('filter-status').value;
+      const data = pharmacy.listPrescriptions(status || null);
+      rxTable.updateData(data);
+    }
+
+    function handleReject(id) {
+      Modal.confirm({
+        title: 'Reject Prescription',
+        message: 'Please provide a reason for rejecting this prescription (it will notify the doctor):',
+        confirmText: 'Reject',
+        confirmStyle: 'danger',
+        onConfirm: () => {
+          const reason = prompt('Reason for rejection:');
+          if (!reason) throw new Error('A reason is required.');
+          pharmacy.rejectPrescription(id, reason, currentUser.staffId);
+          Toast.show('Prescription rejected.');
+          loadQueue();
+        }
+      });
+    }
+
+    function handleDispense(id) {
+      const rx = db.getById('prescriptions', id);
+      const p = db.getById('patients', rx.patientId);
+      
+      let itemsHtml = '';
+      let canDispense = true;
+      let totalAmount = 0;
+
+      for (const item of rx.items) {
+        const med = db.getById('medicines', item.medicineId);
+        const stockDiff = med.stockLevel - item.quantity;
+        let stockWarning = '';
+        if (stockDiff < 0) {
+          canDispense = false;
+          stockWarning = `<span style="color:var(--danger);font-weight:600;">(Short by ${Math.abs(stockDiff)})</span>`;
+        }
+        
+        const price = (med.price * item.quantity) / 100;
+        totalAmount += price;
+
+        itemsHtml += `
+          <tr>
+            <td style="padding:var(--sp-2); border-top:1px solid var(--border);"><strong>${med.name}</strong><br><span class="text-caption">${item.dosage}, ${item.frequency}</span></td>
+            <td style="padding:var(--sp-2); border-top:1px solid var(--border); text-align:center;">${item.quantity} ${stockWarning}</td>
+            <td style="padding:var(--sp-2); border-top:1px solid var(--border); text-align:right;">₹${price.toFixed(2)}</td>
+          </tr>
+        `;
+      }
+
+      const content = `
+        <div style="margin-bottom:var(--sp-4);">
+          <div class="text-caption">Patient</div>
+          <div class="text-body"><strong>${p.name}</strong> (${p.mrn})</div>
+        </div>
+        ${rx.notes ? `<div style="margin-bottom:var(--sp-4);padding:var(--sp-2);background:var(--warning-light);color:var(--warning-dark);border-radius:var(--radius-sm);">${rx.notes}</div>` : ''}
+        
+        <div class="table-container">
+          <table class="data-table">
+          <thead>
+            <tr>
+              <th style="padding:var(--sp-2); text-align:left;">Medicine</th>
+              <th style="padding:var(--sp-2); text-align:center;">Req. Qty</th>
+              <th style="padding:var(--sp-2); text-align:right;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>${itemsHtml}</tbody>
+          <tfoot>
+            <tr>
+              <th colspan="2" style="padding:var(--sp-2); text-align:right; border-top:2px solid var(--border);">Total Bill:</th>
+              <th style="padding:var(--sp-2); text-align:right; border-top:2px solid var(--border);">₹${totalAmount.toFixed(2)}</th>
+            </tr>
+          </tfoot>
+        </table>
+        </div>
+        ${!canDispense ? `<div style="margin-top:var(--sp-4);color:var(--danger);font-weight:500;">Insufficient stock to dispense this prescription.</div>` : ''}
+      `;
+
+      const actions = `
+        <button class="btn btn--secondary" id="disp-cancel">Cancel</button>
+        <button class="btn btn--primary" id="disp-submit" ${!canDispense ? 'disabled' : ''}>Dispense & Bill</button>
+      `;
+
+      const m = Modal.show({ title: 'Dispense Prescription', content, size: 'md', actions });
+
+      document.getElementById('disp-cancel').addEventListener('click', m.close);
+      document.getElementById('disp-submit').addEventListener('click', () => {
+        try {
+          pharmacy.dispense(id, currentUser.staffId);
+          Toast.show('Prescription dispensed and billed to patient.');
+          m.close();
+          loadQueue();
+        } catch(err) {
+          Toast.show(err.message, 'error');
+        }
+      });
+    }
+
+    function handleView(id) {
+      // Basic view for dispensed/rejected
+      const rx = db.getById('prescriptions', id);
+      const content = `
+        <div style="margin-bottom:var(--sp-4);"><strong>Status:</strong> ${Badge.status(rx.status)}</div>
+        ${rx.notes ? `<div style="margin-bottom:var(--sp-4);">${rx.notes}</div>` : ''}
+        <ul>${rx.items.map(i => `<li>${i.name} (Qty: ${i.quantity})</li>`).join('')}</ul>
+      `;
+      Modal.show({ title: 'Prescription Details', content, size: 'sm' });
+    }
+  </script>
+</body>
+</html>

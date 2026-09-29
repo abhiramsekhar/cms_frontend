@@ -219,39 +219,44 @@
 
 /* ── On phones: switch between table and cards ── */
 @media (max-width: 639px) {
-    .table-responsive .data-table {
+    .table-container {
+        border: none;
+        background: transparent;
+    }
+
+    .data-table thead {
         display: none;
     }
 
-    .table-responsive .record-cards {
+    .data-table tr {
         display: block;
+        margin-bottom: var(--sp-4);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
 
-    .table-toolbar {
-        flex-direction: column;
-        align-items: stretch;
+    .data-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: var(--sp-3);
+        border-bottom: 1px solid var(--border);
+        text-align: right;
     }
 
-    .table-toolbar .search-bar {
-        max-width: 100%;
-        order: -1;
+    .data-table td:last-child {
+        border-bottom: none;
     }
-}
 
-/* ── Page Size Selector ── */
-.page-size {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-    font-size: 0.8125rem;
-    color: var(--muted);
-}
-
-.page-size__select {
-    padding: 4px var(--sp-2);
-    font-size: 0.8125rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    min-height: auto;
+    .data-table td::before {
+        content: attr(data-label);
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-right: var(--sp-4);
+        text-align: left;
+    }
 }

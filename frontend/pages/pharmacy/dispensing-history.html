@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dispensing History — Clinova Healthcare</title>
+  <link rel="icon" type="image/svg+xml" href="../../assets/images/favicon.svg">
+  <link rel="stylesheet" href="../../assets/css/variables.css">
+  <link rel="stylesheet" href="../../assets/css/reset.css">
+  <link rel="stylesheet" href="../../assets/css/typography.css">
+  <link rel="stylesheet" href="../../assets/css/layout.css">
+  <link rel="stylesheet" href="../../assets/css/components.css">
+  <link rel="stylesheet" href="../../assets/css/forms.css">
+  <link rel="stylesheet" href="../../assets/css/tables.css">
+  <link rel="stylesheet" href="../../assets/css/utilities.css">
+  <link rel="stylesheet" href="../../assets/css/responsive.css">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script type="module">
+    import { initShell, getPageContent } from '../../components/app-shell.js';
+    import { DataTable, Format } from '../../components/ui.js';
+    import { db } from '../../data/db.js';
+
+    let histTable;
+
+    initShell(['PHARMACIST', 'ADMIN'], () => {
+      const page = getPageContent();
+      
+      page.innerHTML = `
+        <div class="page-header">
+          <div class="page-header__info">
+            <h1 class="text-page-title">Dispensing History</h1>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__header" style="padding: var(--sp-3) var(--sp-4);">
+            <div class="search-bar" style="max-width: 300px; margin: 0;">
+              <span class="search-bar__icon"><svg class="icon icon--sm" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-search"></use></svg></span>
+              <input type="text" class="search-bar__input" id="hist-search" placeholder="Search patient, medicine...">
+            </div>
+          </div>
+          <div id="hist-table"></div>
+        </div>
+      `;
+
+      const columns = [
+        { key: 'createdAt', label: 'Date/Time', sortable: true, render: r => Format.datetime(r.createdAt) },
+        { key: 'patient', label: 'Patient', sortable: true, render: r => {
+          try {
+            const rx = db.getById('prescriptions', r.referenceId);
+            return `<strong>${db.getById('patients', rx.patientId).name}</strong>`;
+          } catch(e) { return '-'; }
+        } },
+        { key: 'medicineId', label: 'Medicine', sortable: true, render: r => db.getById('medicines', r.medicineId).name },
+        { key: 'quantity', label: 'Qty', sortable: true, render: r => Math.abs(r.quantity) },
+        { key: 'performedBy', label: 'Dispensed By', sortable: true, render: r => db.getById('staff', r.performedBy).name }
+      ];
+
+      histTable = new DataTable('hist-table', columns, [], { searchInputId: 'hist-search', defaultSort: 'createdAt' });
+      histTable.sortAsc = false;
+      
+      // Load data
+      const history = db.getAll('stockLedger').filter(l => l.type === 'DISPENSE');
+      histTable.updateData(history);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Prescriptions — Clinova Healthcare</title>
+  <link rel="icon" type="image/svg+xml" href="../../assets/images/favicon.svg">
+  <link rel="stylesheet" href="../../assets/css/variables.css">
+  <link rel="stylesheet" href="../../assets/css/reset.css">
+  <link rel="stylesheet" href="../../assets/css/typography.css">
+  <link rel="stylesheet" href="../../assets/css/layout.css">
+  <link rel="stylesheet" href="../../assets/css/components.css">
+  <link rel="stylesheet" href="../../assets/css/forms.css">
+  <link rel="stylesheet" href="../../assets/css/tables.css">
+  <link rel="stylesheet" href="../../assets/css/utilities.css">
+  <link rel="stylesheet" href="../../assets/css/responsive.css">
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #print-area, #print-area * { visibility: visible; }
+      #print-area { position: absolute; left: 0; top: 0; width: 100%; background: white; padding: 2rem; }
+      .modal__close, .modal__footer { display: none !important; }
+    }
+    .print-header { display: flex; justify-content: space-between; border-bottom: 2px solid var(--border); padding-bottom: var(--sp-4); margin-bottom: var(--sp-6); }
+  </style>
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script type="module">
+    import { initShell, getPageContent } from '../../components/app-shell.js';
+    import { DataTable, Format, Badge, Modal, Toast } from '../../components/ui.js';
+    import { prescriptions } from '../../api/prescriptions.js';
+    import { db } from '../../data/db.js';
+
+    let rxTable;
+    let currentUser;
+
+    initShell(['DOCTOR'], (session) => {
+      currentUser = session;
+      const page = getPageContent();
+      
+      page.innerHTML = `
+        <div class="page-header">
+          <div class="page-header__info">
+            <h1 class="text-page-title">My Prescriptions</h1>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: var(--sp-6);">
+          <div class="card__header" style="padding: var(--sp-3) var(--sp-4);">
+            <div class="form-group" style="margin:0;">
+              <select class="form-input" id="filter-status">
+                <option value="">All Statuses</option>
+                <option value="PENDING">Pending</option>
+                <option value="DISPENSED">Dispensed</option>
+                <option value="CANCELLED">Cancelled</option>
+              </select>
+            </div>
+          </div>
+          <div id="rx-table"></div>
+        </div>
+      `;
+
+      // Setup Table
+      const columns = [
+        { key: 'createdAt', label: 'Date', sortable: true, render: r => Format.date(r.createdAt) },
+        { key: 'patientId', label: 'Patient', sortable: true, render: r => {
+          const p = db.getById('patients', r.patientId);
+          return `<strong>${p.name}</strong>`;
+        }},
+        { key: 'items', label: 'Items', sortable: false, render: r => r.items.map(i => i.name).join(', ') },
+        { key: 'status', label: 'Status', sortable: true, render: r => Badge.status(r.status) },
+        { key: 'actions', label: '', width: '100px', render: r => {
+          let html = `<button class="btn btn--secondary btn--sm btn-view" data-id="${r.id}">View</button>`;
+          if (r.status === 'PENDING') {
+            html += `<button class="btn btn--danger btn--sm btn--icon btn-cancel" data-id="${r.id}" title="Cancel" style="margin-left:4px;"><svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-x"></use></svg></button>`;
+          }
+          return html;
+        }}
+      ];
+
+      rxTable = new DataTable('rx-table', columns, [], { defaultSort: 'createdAt' });
+      rxTable.sortAsc = false;
+      loadRx();
+
+      // Filters
+      document.getElementById('filter-status').addEventListener('change', loadRx);
+
+      // Event Delegation
+      document.getElementById('rx-table').addEventListener('click', (e) => {
+        const viewBtn = e.target.closest('.btn-view');
+        if (viewBtn) return showRx(viewBtn.dataset.id);
+        
+        const cancelBtn = e.target.closest('.btn-cancel');
+        if (cancelBtn) {
+          Modal.confirm({
+            title: 'Cancel Prescription',
+            message: 'Are you sure you want to cancel this pending prescription?',
+            confirmStyle: 'danger',
+            onConfirm: () => {
+              prescriptions.cancel(cancelBtn.dataset.id);
+              Toast.show('Prescription cancelled.');
+              loadRx();
+            }
+          });
+        }
+      });
+    });
+
+    function loadRx() {
+      const status = document.getElementById('filter-status').value;
+      const data = prescriptions.list(status ? { status, doctorId: currentUser.staffId } : { doctorId: currentUser.staffId });
+      rxTable.updateData(data);
+    }
+
+    function showRx(id) {
+      const rx = prescriptions.getById(id);
+      const p = db.getById('patients', rx.patientId);
+      
+      const content = `
+        <div id="print-area">
+          <div class="print-header">
+            <div>
+              <img src="../../assets/images/logo.svg" alt="Clinova" style="width:40px;margin-bottom:var(--sp-2);">
+              <div class="text-card-title">Clinova Healthcare</div>
+              <div class="text-caption">MG Road, Ernakulam, Kerala</div>
+            </div>
+            <div style="text-align: right;">
+              <h2 class="text-page-title" style="margin-bottom:var(--sp-1);">PRESCRIPTION</h2>
+              <div class="text-caption">Date: ${Format.date(rx.createdAt)}</div>
+              <div class="text-caption">Doctor: ${db.getById('staff', rx.doctorId).name}</div>
+            </div>
+          </div>
+          <div style="margin-bottom:var(--sp-4);">
+            <div class="text-caption">Patient</div>
+            <div class="text-body"><strong>${p.name}</strong> (${p.mrn})</div>
+            <div class="text-body-sm">${Format.age(p.dateOfBirth)} yrs, ${p.gender}</div>
+          </div>
+          ${rx.notes ? `<div style="margin-bottom:var(--sp-4);padding:var(--sp-2);background:var(--warning-light);color:var(--warning-dark);border-radius:var(--radius-sm);">${rx.notes}</div>` : ''}
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="padding:var(--sp-2); text-align:left;">Medicine</th>
+                <th style="padding:var(--sp-2); text-align:left;">Instructions</th>
+                <th style="padding:var(--sp-2); text-align:center;">Qty</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rx.items.map(i => `
+                <tr>
+                  <td style="padding:var(--sp-2); border-top:1px solid var(--border);">${i.name}</td>
+                  <td style="padding:var(--sp-2); border-top:1px solid var(--border);">${i.dosage}, ${i.frequency}, ${i.duration}</td>
+                  <td style="padding:var(--sp-2); border-top:1px solid var(--border); text-align:center;">${i.quantity}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+          <div style="margin-top: 4rem; text-align: right; border-top: 1px solid var(--border); padding-top: 1rem; width: 200px; margin-left: auto;">
+            <div class="text-caption">Doctor's Signature</div>
+          </div>
+        </div>
+      `;
+
+      const actions = `
+        <button class="btn btn--secondary" onclick="window.print()">
+          <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-printer"></use></svg>
+          Print
+        </button>
+      `;
+
+      Modal.show({ title: 'Prescription Details', content, size: 'lg', actions });
+    }
+  </script>
+</body>
+</html>

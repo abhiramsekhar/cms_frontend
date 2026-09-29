@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inventory — Clinova Healthcare</title>
+  <link rel="icon" type="image/svg+xml" href="../../assets/images/favicon.svg">
+  <link rel="stylesheet" href="../../assets/css/variables.css">
+  <link rel="stylesheet" href="../../assets/css/reset.css">
+  <link rel="stylesheet" href="../../assets/css/typography.css">
+  <link rel="stylesheet" href="../../assets/css/layout.css">
+  <link rel="stylesheet" href="../../assets/css/components.css">
+  <link rel="stylesheet" href="../../assets/css/forms.css">
+  <link rel="stylesheet" href="../../assets/css/tables.css">
+  <link rel="stylesheet" href="../../assets/css/utilities.css">
+  <link rel="stylesheet" href="../../assets/css/responsive.css">
+</head>
+<body>
+  <div class="app" id="app"></div>
+  <script type="module">
+    import { initShell, getPageContent } from '../../components/app-shell.js';
+    import { DataTable, Format, Toast, Modal } from '../../components/ui.js';
+    import { pharmacy } from '../../api/pharmacy.js';
+
+    let invTable;
+
+    initShell(['PHARMACIST', 'ADMIN'], () => {
+      const page = getPageContent();
+      page.innerHTML = `
+        <div class="page-header">
+          <div class="page-header__info">
+            <h1 class="text-page-title">Medicine Inventory</h1>
+          </div>
+          <div class="page-header__actions">
+            <button class="btn btn--primary" id="btn-add-med">
+              <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-plus"></use></svg>
+              Add Medicine
+            </button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: var(--sp-6);">
+          <div class="card__header" style="padding: var(--sp-3) var(--sp-4);">
+            <div class="search-bar" style="max-width: 300px; margin: 0;">
+              <span class="search-bar__icon"><svg class="icon icon--sm" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-search"></use></svg></span>
+              <input type="text" class="search-bar__input" id="med-search" placeholder="Search by name, generic...">
+            </div>
+          </div>
+          <div id="inv-table"></div>
+        </div>
+      `;
+
+      const columns = [
+        { key: 'name', label: 'Medicine', sortable: true, render: r => `<strong>${r.name}</strong><br><span class="text-caption">${r.genericName}</span>` },
+        { key: 'category', label: 'Category', sortable: true },
+        { key: 'price', label: 'Price', sortable: true, render: r => Format.money(r.price) },
+        { key: 'stockLevel', label: 'Stock', sortable: true, render: r => getStockBadge(r) },
+        { key: 'isActive', label: 'Status', sortable: true, render: r => r.isActive ? `<span class="badge badge--success">Active</span>` : `<span class="badge badge--neutral">Inactive</span>` },
+        { key: 'actions', label: '', width: '120px', render: r => `
+          <button class="btn btn--secondary btn--sm btn-toggle" data-id="${r.id}">${r.isActive ? 'Deactivate' : 'Activate'}</button>
+        `}
+      ];
+
+      invTable = new DataTable('inv-table', columns, [], { searchInputId: 'med-search', defaultSort: 'name' });
+      invTable.sortAsc = true;
+      loadInventory();
+
+      document.getElementById('btn-add-med').addEventListener('click', showAddModal);
+      
+      document.getElementById('inv-table').addEventListener('click', (e) => {
+        const toggleBtn = e.target.closest('.btn-toggle');
+        if (toggleBtn) {
+          const id = toggleBtn.dataset.id;
+          const med = pharmacy.listMedicines().find(m => m.id === id);
+          pharmacy.updateMedicineStatus(id, !med.isActive);
+          Toast.show(`Medicine ${!med.isActive ? 'activated' : 'deactivated'}.`);
+          loadInventory();
+        }
+      });
+    });
+
+    function getStockBadge(med) {
+      if (med.stockLevel === 0) return `<span class="badge badge--danger">Out of Stock (0)</span>`;
+      if (med.stockLevel <= med.reorderLevel) return `<span class="badge badge--warning">Low Stock (${med.stockLevel})</span>`;
+      
+      // Check expiry logic for oldest batch
+      const today = new Date().toISOString().split('T')[0];
+      const validBatches = med.batches.filter(b => b.quantity > 0).sort((a,b) => a.expiryDate.localeCompare(b.expiryDate));
+      
+      if (validBatches.length > 0) {
+        const nearestExpiry = validBatches[0].expiryDate;
+        if (nearestExpiry < today) {
+          return `<span class="badge badge--danger">Expired (${med.stockLevel})</span>`;
+        }
+      }
+      return `<span class="badge badge--success">In Stock (${med.stockLevel})</span>`;
+    }
+
+    function loadInventory() {
+      invTable.updateData(pharmacy.listMedicines());
+    }
+
+    function showAddModal() {
+      const content = `
+        <form id="add-med-form" style="display:flex;flex-direction:column;gap:var(--sp-4);">
+          <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
+            <div class="form-group">
+              <label class="form-group__label">Medicine Name *</label>
+              <input type="text" class="form-input" name="name" required>
+            </div>
+            <div class="form-group">
+              <label class="form-group__label">Generic Name *</label>
+              <input type="text" class="form-input" name="genericName" required>
+            </div>
+          </div>
+          <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
+            <div class="form-group">
+              <label class="form-group__label">Category *</label>
+              <select class="form-input" name="category" required>
+                <option value="Tablet">Tablet</option>
+                <option value="Syrup">Syrup</option>
+                <option value="Injection">Injection</option>
+                <option value="Ointment">Ointment</option>
+                <option value="Drops">Drops</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-group__label">Unit Size</label>
+              <input type="text" class="form-input" name="unit" placeholder="e.g. 1 Strip (10 tabs)">
+            </div>
+          </div>
+          <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
+            <div class="form-group">
+              <label class="form-group__label">Price (₹) *</label>
+              <input type="number" class="form-input" name="price" required min="0.01" step="0.01">
+            </div>
+            <div class="form-group">
+              <label class="form-group__label">Reorder Level *</label>
+              <input type="number" class="form-input" name="reorderLevel" required min="1" value="20">
+            </div>
+          </div>
+        </form>
+      `;
+
+      const actions = `
+        <button class="btn btn--secondary" id="add-cancel">Cancel</button>
+        <button class="btn btn--primary" id="add-submit" form="add-med-form">Add Medicine</button>
+      `;
+
+      const m = Modal.show({ title: 'Add Medicine', content, size: 'md', actions });
+
+      document.getElementById('add-cancel').addEventListener('click', m.close);
+      document.getElementById('add-med-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const f = e.target;
+        if (!f.checkValidity()) return f.reportValidity();
+
+        try {
+          pharmacy.addMedicine({
+            name: f.name.value.trim(),
+            genericName: f.genericName.value.trim(),
+            category: f.category.value,
+            unit: f.unit.value.trim(),
+            price: Math.round(parseFloat(f.price.value) * 100), // convert to paise
+            reorderLevel: parseInt(f.reorderLevel.value)
+          });
+          Toast.show('Medicine added successfully.');
+          loadInventory();
+          m.close();
+        } catch(err) {
+          Toast.show(err.message, 'error');
+        }
+      });
+    }
+  </script>
+</body>
+</html>
