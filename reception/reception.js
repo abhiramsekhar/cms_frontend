@@ -218,42 +218,23 @@ const R = {
 
     /* ---------- token generation ---------- */
     generateToken: (doctorId, date, ignoreId, slot) => {
+    // Token number is based on the time-slot order.
+    // Payment/booked order does NOT affect the token.
 
-        // First check whether this exact doctor + date + slot
-        // had a cancelled appointment with a released token.
-        if (slot) {
-            const released = R.appointments()
-                .filter(a =>
-                    a.id !== ignoreId &&
-                    a.doctor === doctorId &&
-                    a.date === date &&
-                    a.slot === slot &&
-                    a.status === 'CANCELLED' &&
-                    a.cancelled_token_number
-                )
-                .map(a => Number(a.cancelled_token_number))
-                .filter(n => n > 0)
-                .sort((a, b) => a - b);
+    const slotIndex = CMS.S.slots.findIndex(
+        s => s === slot
+    );
 
-            if (released.length) {
-                return released[0];
-            }
-        }
+    if (slotIndex === -1) {
+        throw Error('Invalid time slot');
+    }
 
-        // If there is no released token for this exact slot,
-        // generate the next token for this doctor + date.
-        const nums = R.appointments()
-            .filter(a =>
-                a.id !== ignoreId &&
-                a.doctor === doctorId &&
-                a.date === date &&
-                a.status !== 'CANCELLED' &&
-                a.token_number
-            )
-            .map(a => Number(a.token_number));
-
-        return nums.length ? Math.max(...nums) + 1 : 1;
-    },
+    // 1st slot = Token 1
+    // 2nd slot = Token 2
+    // 3rd slot = Token 3
+    // ...
+    return slotIndex + 1;
+},
 
     /* =====================================================
        BUSINESS RULES (all changes go through CMS.tx)
