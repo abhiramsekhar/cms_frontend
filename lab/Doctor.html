@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Doctor Portal - ClinicCare</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="lab.css"></head>
+<body>
+<div class="toast" id="toast"></div>
+<header class="header"><strong style="font-size:20px">🩺 ClinicCare · Doctor Portal</strong>
+  <div class="header-right">
+    <select id="doc" onchange="render()" style="padding:10px;border-radius:10px;border:1px solid #cbd5e1"><option>D01 - Dr. Anil</option><option>D02 - Dr. Priya</option><option>D03 - Dr. Rajan</option></select>
+    <button class="notification-btn" onclick="document.getElementById('notes').scrollIntoView()">🔔<span class="notification-count" id="nc">0</span></button>
+  </div></header>
+<div class="dmain">
+  <div class="result-card" style="max-width:none;margin-bottom:26px">
+    <h2>Prescribe Lab Test</h2>
+    <div class="form-grid">
+      <div class="form-group"><label>Patient Name *</label><input id="pn"></div>
+      <div class="form-group"><label>Patient ID (auto if blank)</label><input id="pid"></div>
+      <div class="form-group"><label>Age</label><input id="age" type="number" min="0"></div>
+      <div class="form-group"><label>Test *</label><select id="test"></select></div>
+      <div class="form-group"><label>Priority</label><select id="pr"><option>Normal</option><option>Urgent</option><option>STAT</option></select></div>
+      <div class="form-group"><label>Clinical Notes</label><input id="nt" placeholder="e.g. Fasting sample"></div>
+    </div>
+    <div class="form-actions"><button class="primary-btn" onclick="prescribe()">Send to Laboratory →</button></div>
+  </div>
+  <div class="section"><h2>My Prescriptions</h2>
+    <div class="table-container"><table><thead><tr><th>Test ID</th><th>Patient</th><th>Test</th><th>Priority</th><th>Status</th><th>Result</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+  <div class="section" id="notes"><div class="section-header"><h2>Lab Notifications</h2><button class="secondary-btn" onclick="readAll()">Mark All as Read</button></div><div class="notification-list" id="nl"></div></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="common.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function load(){ let s=null; try{ s=JSON.parse(localStorage.getItem(KEY)); }catch(e){}
+  s = s && s.tests ? s : {tests:[],results:[],bills:[],notes:[],docNotes:[],n:{t:1,r:1,b:1}};
+  s.docNotes = s.docNotes || []; return s; }
+let S = load();
+const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} };
+const now = () => new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
+let tt; function toast(m,err){ const e=$("toast"); e.textContent=m; e.classList.toggle("error",!!err); e.classList.add("show"); clearTimeout(tt); tt=setTimeout(()=>e.classList.remove("show"),3200); }
+
+function render(){
+  const d = $("doc").value, mine = S.tests.filter(t => t.doctor === d);
+  $("rows").innerHTML = mine.map(t => { const r = S.results.find(x => x.id === t.result);
+    return `<tr><td>${t.id}</td><td>${esc(t.pname)}<span class="sub">${t.patient}</span></td><td>${t.test}</td><td><span class="prio ${t.priority}">${t.priority}</span></td><td><span class="status ${t.status.toLowerCase()}">${t.status}</span></td><td>${r ? `<span class="flag ${r.flag}">${r.value} (${r.flag})</span> <button class="small-btn" onclick="viewPdf('${t.id}')">Open PDF</button>` : "Awaiting lab"}</td></tr>`; }).join("")
+    || `<tr class="empty-row"><td colspan="6">No prescriptions yet. Prescribe a test above.</td></tr>`;
+  const n = S.docNotes.filter(x => x.doctor === d);
+  $("nl").innerHTML = n.map(x => `<div class="notification ${x.unread?"unread":""}"><span>📄</span><div><strong>${esc(x.text)}</strong><br><small>${x.time}</small></div></div>`).join("") || "<p class='summary'>No notifications.</p>";
+  $("nc").textContent = n.filter(x => x.unread).length;
+}
+function prescribe(){
+  const name = $("pn").value.trim();
+  $("pn").classList.toggle("input-error", !name);
+  if (!name) return toast("Please enter the patient name.", true);
+  const test = $("test").value, id = "LT" + String(S.n.t++).padStart(3,"0"), doc = $("doc").value;
+  const t = {id, patient:$("pid").value.trim() || "P"+(100+S.tests.length), pname:name, age:$("age").value, doctor:doc, test, sample:CAT[test].s, priority:$("pr").value, status:"Pending", notes:$("nt").value.trim(), date:new Date().toLocaleDateString("en-IN"), result:null};
+  S.tests.push(t); S.bills.push({id:"B"+String(S.n.b++).padStart(3,"0"), test:id, amt:CAT[test].p, paid:false});
+  S.notes.unshift({icon:"🧪", text:`New ${t.priority} request ${id} (${test}) from ${doc}.`, time:now(), unread:true});
+  save(); ["pn","pid","age","nt"].forEach(i => $(i).value=""); render(); toast(`Sent to laboratory · ${id}`);
+}
+function viewPdf(id){
+  const t = S.tests.find(x => x.id === id), r = S.results.find(x => x.id === t.result);
+  S.docNotes.filter(x => x.testId === id).forEach(x => x.unread = false); save(); render(); openPdf(t, r);
+}
+function readAll(){ S.docNotes.filter(x => x.doctor === $("doc").value).forEach(x => x.unread=false); save(); render(); }
+window.addEventListener("storage", e => { if (e.key === KEY) { S = load(); render(); toast("🔔 Update from laboratory"); } });
+$("test").innerHTML = Object.keys(CAT).map(k => `<option>${k}</option>`).join("");
+render();
+</script></body></html>

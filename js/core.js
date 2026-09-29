@@ -1,4 +1,4 @@
-const CMS={mods:{},base:'',home:{ADMIN:'admin/dashboard.html',RECEPTIONIST:'reception/patients.html',DOCTOR:'doctor/my-appointments.html',PHARMACIST:'pharmacy/prescription-queue.html',LAB_TECH:'lab/lab-queue.html'}};
+const CMS={mods:{},base:'',home:{ADMIN:'admin/dashboard.html',RECEPTIONIST:'reception/dashboard.html',DOCTOR:'doctor/my-appointments.html',PHARMACIST:'pharmacy/prescription-queue.html',LAB_TECH:'lab/lab-queue.html'}};
 CMS.slug=l=>l.toLowerCase().replace(/[^a-z]+/g,'-').replace(/^-|-$/g,'');
 (()=>{
 const K='cms_db_v1',P=(p,n)=>p+String(n).padStart(4,'0');
