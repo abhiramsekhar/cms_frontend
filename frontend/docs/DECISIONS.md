@@ -23,3 +23,16 @@
 ## Currency Storage: Integer Paise
 
 All monetary values are stored as integer paise (1 rupee = 100 paise) to avoid floating-point arithmetic errors. Display formatting uses `Intl.NumberFormat('en-IN')` with division by 100.
+
+## Disconnected Prototypes Removed (2026-09-29)
+
+Two feature areas were found as disconnected prototypes and will be rebuilt properly inside the design system: (a) a fuller pharmacy supply chain — Purchases, Suppliers, Stock Alerts, Dispensing History — planned for the Pharmacy phase; (b) a doctor-initiated lab test that doesn't require an open consultation, planned for the Doctor phase.
+
+**What was removed and why:**
+
+- **Pharmacy stubs** (`bills.html`, `purchases.html`, `suppliers.html`, `stock-alerts.html`): shell pages with no real content; all used the old prototype's `theme.css` and `core.js`, not the new design system.
+- **Lab prototype** (`lab/Doctor.html`, `lab/lab-queue.html`, `lab/lab.css`, `lab/script.js`, `lab/Common.js`): standalone pages with their own CSS and hardcoded data, disconnected from the design system.
+- **Old root prototype** (`index.html`, `css/`, `js/`, `admin/`, `doctor/`, `reception/`, `pharmacy/`): the entire legacy SPA shell; superseded by the `frontend/` design system.
+- **Backup file** (`reception/reception_backup.js`): duplicate of `reception.js`.
+
+## Ideas for Later
