@@ -369,9 +369,13 @@
       const medSelect = document.getElementById('rx-med');
       
       let selectedMedicineId = '';
-      medSelect.addEventListener('change', () => {
-        selectedMedicineId = medSelect.value;
-      });
+      const updateSelectedMed = () => {
+        if (medSelect.value) {
+          selectedMedicineId = medSelect.value;
+        }
+      };
+      medSelect.addEventListener('change', updateSelectedMed);
+      medSelect.addEventListener('click', updateSelectedMed);
       
       const renderMedicineOptions = (query = '') => {
         const normalizedQuery = query.trim().toLowerCase();
@@ -385,7 +389,7 @@
           ).join('')}
         `;
         selectedMedicineId = '';
-        medSelect.value = '';
+        medSelect.selectedIndex = 0;
       };
 
       // Initial render
