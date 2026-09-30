@@ -21,7 +21,7 @@
     import { initShell, getPageContent } from '../../components/app-shell.js';
     import { DataTable, Format, Toast, Modal } from '../../components/ui.js';
     import { patients } from '../../api/patients.js';
-    import { todayStr } from '../../api/appointments.js';
+    import { validateName, validatePhone, validateDob, validateGender, validateAddress, validateAllergies, validateBloodGroup, validatePatientForm, ageFromDob, MIN_YEAR } from '../../core/validators.js';
 
     let patientTable;
 
@@ -57,9 +57,8 @@
         { key: 'name', label: 'Patient Name', sortable: true, render: r => `<strong>${r.name}</strong><br><span class="text-caption">${r.gender}, ${Format.age(r.dateOfBirth)} yrs</span>` },
         { key: 'phone', label: 'Phone', sortable: false },
         { key: 'createdAt', label: 'Registered', sortable: true, render: r => Format.date(r.createdAt) },
-        { key: 'actions', label: '', width: '170px', render: r => `
+        { key: 'actions', label: '', width: '80px', render: r => `
           <a href="../shared/patient-profile.html?id=${r.id}" class="btn btn--ghost btn--sm">View</a>
-          <a href="appointments.html?patientId=${r.id}" class="btn btn--primary btn--sm">Book</a>
         `}
       ];
 
@@ -76,48 +75,52 @@
 
       // Register Button
       document.getElementById('btn-register').addEventListener('click', () => {
-        showRegisterModal(session.staffId);
+        showRegisterModal(session.userId);
       });
     });
 
-    function showRegisterModal(staffId) {
-      const fee = patients.getRegistrationFee();
-
+    function showRegisterModal(userId) {
       const formHtml = `
         <form id="register-form" novalidate style="display:flex;flex-direction:column;gap:var(--sp-4);">
           <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
             <div class="form-group">
               <label class="form-group__label">Full Name *</label>
-              <input type="text" class="form-input" name="name" required>
+              <input type="text" class="form-input" name="name" maxlength="60" autocomplete="off">
+              <small class="form-group__error" data-err="name"></small>
             </div>
             <div class="form-group">
               <label class="form-group__label">Phone Number *</label>
-              <input type="tel" class="form-input" name="phone" required pattern="^\\+?\\d{10,14}$">
+              <input type="tel" class="form-input" name="phone" maxlength="17" inputmode="tel" placeholder="e.g. 9876543210" autocomplete="off">
+              <small class="form-group__error" data-err="phone"></small>
             </div>
           </div>
           <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
             <div class="form-group">
               <label class="form-group__label">Date of Birth *</label>
-              <input type="date" class="form-input" name="dob" id="reg-dob" required max="${todayStr()}">
+              <input type="date" class="form-input" name="dob" id="reg-dob" min="${MIN_YEAR}-01-01" max="${new Date().toISOString().split('T')[0]}">
+              <small class="form-group__error" data-err="dateOfBirth"></small>
             </div>
             <div class="form-group">
               <label class="form-group__label">Gender *</label>
-              <select class="form-input" name="gender" required>
+              <select class="form-input" name="gender">
                 <option value="">Select...</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
                 <option value="Other">Other</option>
               </select>
+              <small class="form-group__error" data-err="gender"></small>
             </div>
           </div>
           <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
             <div class="form-group">
               <label class="form-group__label">Address</label>
-              <input type="text" class="form-input" name="address">
+              <input type="text" class="form-input" name="address" maxlength="200" autocomplete="off">
+              <small class="form-group__error" data-err="address"></small>
             </div>
             <div class="form-group">
               <label class="form-group__label">Allergies (comma separated)</label>
-              <input type="text" class="form-input" name="allergies" placeholder="e.g. Penicillin, Peanuts">
+              <input type="text" class="form-input" name="allergies" placeholder="e.g. Penicillin, Peanuts" autocomplete="off">
+              <small class="form-group__error" data-err="allergies"></small>
             </div>
           </div>
           <div class="form-group">
@@ -129,150 +132,146 @@
               <option value="AB+">AB+</option><option value="AB-">AB-</option>
               <option value="O+">O+</option><option value="O-">O-</option>
             </select>
+            <small class="form-group__error" data-err="bloodGroup"></small>
           </div>
-
+          
           <div id="guardian-section" style="display:none; padding:var(--sp-4); background:var(--bg); border-radius:var(--radius-md); border:1px solid var(--border);">
             <div class="text-card-title" style="margin-bottom:var(--sp-3); font-size:0.875rem;">Guardian Details (Required for under 18)</div>
             <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
               <div class="form-group">
                 <label class="form-group__label">Guardian Name *</label>
-                <input type="text" class="form-input" name="guardianName" id="reg-guardian-name">
+                <input type="text" class="form-input" name="guardianName" id="reg-guardian-name" maxlength="60" autocomplete="off">
+                <small class="form-group__error" data-err="guardianName"></small>
               </div>
               <div class="form-group">
                 <label class="form-group__label">Guardian Phone *</label>
-                <input type="tel" class="form-input" name="guardianPhone" id="reg-guardian-phone">
+                <input type="tel" class="form-input" name="guardianPhone" id="reg-guardian-phone" maxlength="17" inputmode="tel" placeholder="e.g. 9876543210" autocomplete="off">
+                <small class="form-group__error" data-err="guardianPhone"></small>
               </div>
             </div>
           </div>
         </form>
-
-        <!-- Step 2: registration fee -->
-        <div id="reg-pay-panel" style="display:none;">
-          <p class="text-body-sm" style="margin-bottom:var(--sp-4);">Collect the registration fee. The patient ID (MRN) is generated once payment is received.</p>
-          <div id="reg-summary" style="padding:var(--sp-4);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:var(--sp-4);"></div>
-          <div class="form-group">
-            <label class="form-group__label">Registration Fee</label>
-            <div class="text-page-title">${Format.money(fee)}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-group__label">Payment Method</label>
-            <select class="form-input" id="reg-pay-method">
-              <option value="CASH">Cash</option>
-              <option value="UPI">UPI</option>
-              <option value="CARD">Credit/Debit Card</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Step 3: done -->
-        <div id="reg-done-panel" style="display:none;text-align:center;padding:var(--sp-4) 0;">
-          <div class="text-caption">Patient ID (MRN)</div>
-          <div id="reg-done-mrn" class="text-page-title" style="margin:var(--sp-2) 0;"></div>
-          <div id="reg-done-info" class="text-body-sm" style="margin-bottom:var(--sp-6);"></div>
-          <div style="display:flex;gap:var(--sp-3);justify-content:center;">
-            <button type="button" class="btn btn--secondary" id="reg-done-close">Close</button>
-            <a class="btn btn--primary" id="reg-done-book" href="#">Book Appointment</a>
-          </div>
-        </div>
       `;
 
       const actionsHtml = `
-        <button class="btn btn--secondary" id="reg-cancel" type="button">Cancel</button>
-        <button class="btn btn--secondary" id="reg-back" type="button" style="display:none;">Back</button>
-        <button class="btn btn--primary" id="reg-next" type="button">Continue to Payment</button>
+        <button class="btn btn--secondary" id="reg-cancel">Cancel</button>
+        <button class="btn btn--primary" id="reg-submit" form="register-form">Register Patient</button>
       `;
 
       const m = Modal.show({ title: 'Register New Patient', content: formHtml, size: 'md', actions: actionsHtml });
 
+      document.getElementById('reg-cancel').addEventListener('click', m.close);
+
       const form = document.getElementById('register-form');
-      const payPanel = document.getElementById('reg-pay-panel');
-      const donePanel = document.getElementById('reg-done-panel');
-      const btnCancel = document.getElementById('reg-cancel');
-      const btnBack = document.getElementById('reg-back');
-      const btnNext = document.getElementById('reg-next');
-      let step = 1;
-      let data = null;
 
-      btnCancel.addEventListener('click', m.close);
-      document.getElementById('reg-done-close').addEventListener('click', m.close);
+      // ---- inline error helpers ----
+      const showError = (field, msg) => {
+        const slot = form.querySelector(`[data-err="${field}"]`);
+        if (!slot) return;
+        slot.textContent = msg || '';
+        const group = slot.closest('.form-group');
+        if (group) group.classList.toggle('has-error', !!msg);
+      };
+      const clearErrors = () => form.querySelectorAll('[data-err]').forEach(el => showError(el.dataset.err, ''));
 
-      // Guardian logic
+      // ---- guardian logic ----
       const dobInput = document.getElementById('reg-dob');
       const gSection = document.getElementById('guardian-section');
       const gName = document.getElementById('reg-guardian-name');
       const gPhone = document.getElementById('reg-guardian-phone');
 
-      dobInput.addEventListener('change', (e) => {
-        if (!e.target.value) return;
-        const age = patients.calculateAge(e.target.value);
-        const minor = age < 18;
-        gSection.style.display = minor ? 'block' : 'none';
-        gName.required = minor;
-        gPhone.required = minor;
-      });
-
-      const showStep = (n) => {
-        step = n;
-        form.style.display = n === 1 ? 'flex' : 'none';
-        payPanel.style.display = n === 2 ? 'block' : 'none';
-        btnBack.style.display = n === 2 ? '' : 'none';
-        btnNext.textContent = n === 2 ? 'Receive Payment & Register' : 'Continue to Payment';
+      const updateGuardian = () => {
+        const dob = validateDob(dobInput.value);
+        const isMinor = dob.valid && ageFromDob(dob.value) < 18;
+        gSection.style.display = isMinor ? 'block' : 'none';
+        gName.required = isMinor;
+        gPhone.required = isMinor;
+        if (!isMinor) { showError('guardianName', ''); showError('guardianPhone', ''); }
       };
 
-      btnBack.addEventListener('click', () => showStep(1));
+      // ---- per-field validators (used on blur / change) ----
+      const fieldChecks = {
+        name: () => validateName(form.name.value, 'Full name'),
+        phone: () => validatePhone(form.phone.value),
+        dateOfBirth: () => validateDob(dobInput.value),
+        gender: () => validateGender(form.gender.value),
+        address: () => validateAddress(form.address.value),
+        allergies: () => validateAllergies(form.allergies.value),
+        bloodGroup: () => validateBloodGroup(form.bloodGroup.value),
+        guardianName: () => validateName(gName.value, 'Guardian name'),
+        guardianPhone: () => validatePhone(gPhone.value, 'Guardian phone')
+      };
+      const inputByField = {
+        name: form.name, phone: form.phone, dateOfBirth: dobInput, gender: form.gender,
+        address: form.address, allergies: form.allergies, bloodGroup: form.bloodGroup,
+        guardianName: gName, guardianPhone: gPhone
+      };
+      Object.entries(inputByField).forEach(([field, el]) => {
+        el.addEventListener('blur', () => {
+          if (field.startsWith('guardian') && gSection.style.display === 'none') return;
+          showError(field, fieldChecks[field]().error);
+        });
+        el.addEventListener('input', () => showError(field, ''));
+      });
 
-      btnNext.addEventListener('click', () => {
-        // ---- Step 1 -> 2: validate details, check duplicates, then ask for payment ----
-        if (step === 1) {
-          if (!form.checkValidity()) { form.reportValidity(); return; }
-          data = {
-            name: form.name.value.trim(),
-            phone: form.phone.value.trim(),
-            dateOfBirth: form.dob.value,
-            gender: form.gender.value,
-            address: form.address.value.trim(),
-            allergies: form.allergies.value.trim() ? form.allergies.value.trim().split(',').map(s => s.trim()).filter(Boolean) : [],
-            bloodGroup: form.bloodGroup.value,
-            guardianName: gName.value.trim(),
-            guardianPhone: gPhone.value.trim()
-          };
-          try {
-            patients.precheck(data);
-          } catch (err) {
-            Toast.show(err.message, 'error');
-            return;
-          }
-          document.getElementById('reg-summary').innerHTML =
-            `<strong>${data.name}</strong><br><span class="text-caption">${data.gender}, ${Format.age(data.dateOfBirth)} yrs · ${data.phone}</span>`;
-          showStep(2);
+      // Block characters that can never be valid while typing
+      const stripName = (el) => { el.value = el.value.replace(/[^\p{L}\p{M}\s.'’-]/gu, ''); };
+      const stripPhone = (el) => { el.value = el.value.replace(/[^\d+\s()-]/g, ''); };
+      form.name.addEventListener('input', () => stripName(form.name));
+      gName.addEventListener('input', () => stripName(gName));
+      form.phone.addEventListener('input', () => stripPhone(form.phone));
+      gPhone.addEventListener('input', () => stripPhone(gPhone));
+
+      dobInput.addEventListener('change', () => {
+        showError('dateOfBirth', validateDob(dobInput.value).error);
+        updateGuardian();
+      });
+      dobInput.addEventListener('input', updateGuardian);
+
+      // Submit
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        clearErrors();
+        updateGuardian();
+
+        const result = validatePatientForm({
+          name: form.name.value,
+          phone: form.phone.value,
+          dateOfBirth: dobInput.value,
+          gender: form.gender.value,
+          address: form.address.value,
+          allergies: form.allergies.value,
+          bloodGroup: form.bloodGroup.value,
+          guardianName: gName.value,
+          guardianPhone: gPhone.value
+        });
+
+        if (!result.valid) {
+          Object.entries(result.errors).forEach(([field, msg]) => showError(field, msg));
+          const firstBad = Object.keys(result.errors).map(f => inputByField[f]).find(Boolean);
+          if (firstBad) firstBad.focus();
           return;
         }
 
-        // ---- Step 2: take payment and register ----
-        if (step === 2) {
-          try {
-            btnNext.disabled = true;
-            const method = document.getElementById('reg-pay-method').value;
-            const { patient, bill } = patients.registerAndPay(data, { method }, staffId);
+        const data = {
+          name: result.data.name,
+          phone: result.data.phone,
+          dateOfBirth: result.data.dateOfBirth,
+          gender: result.data.gender,
+          address: result.data.address,
+          allergies: result.data.allergies,
+          bloodGroup: result.data.bloodGroup,
+          guardianName: result.data.guardianName,
+          guardianPhone: result.data.guardianPhone
+        };
 
-            patientTable.updateData(patients.list());
-
-            // show the result
-            form.style.display = 'none';
-            payPanel.style.display = 'none';
-            donePanel.style.display = 'block';
-            btnCancel.style.display = 'none';
-            btnBack.style.display = 'none';
-            btnNext.style.display = 'none';
-            document.getElementById('reg-done-mrn').textContent = patient.mrn;
-            document.getElementById('reg-done-info').textContent =
-              `${patient.name} registered. Registration fee ${Format.money(bill.totalAmount)} paid (${method}).`;
-            document.getElementById('reg-done-book').href = `appointments.html?patientId=${patient.id}`;
-            Toast.show(`Registered with MRN ${patient.mrn}.`);
-          } catch (err) {
-            Toast.show(err.message, 'error');
-            btnNext.disabled = false;
-          }
+        try {
+          const p = patients.register(data, userId);
+          Toast.show(`Patient ${p.name} registered successfully with MRN ${p.mrn}.`);
+          patientTable.updateData(patients.list());
+          m.close();
+        } catch (err) {
+          Toast.show(err.message, 'error');
         }
       });
     }
