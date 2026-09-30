@@ -438,6 +438,7 @@ export async function seed() {
     { id:'set-05', key:'appointment.slotDuration', value:'30',              updatedAt:NOW, _v:1 },
     { id:'set-06', key:'appointment.startTime',    value:'"09:00"',         updatedAt:NOW, _v:1 },
     { id:'set-07', key:'appointment.endTime',      value:'"17:00"',         updatedAt:NOW, _v:1 },
+    { id:'set-08', key:'billing.registrationFee',  value:'20000',           updatedAt:NOW, _v:1 }, // paise (₹200) — new patient registration fee
   ];
 
   /* ══════════ WRITE ALL ══════════ */
