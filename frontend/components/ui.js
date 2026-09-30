@@ -371,27 +371,34 @@ export class DataTable {
     for (const row of paginated) {
       html += `<tr>`;
       for (const col of this.columns) {
-        const val = col.render ? col.render(row) : row[col.key];
-        // responsive data-label for stacked cards
-        html += `<td data-label="${col.label}">${val == null ? '-' : val}</td>`;
+        try {
+          const val = col.render ? col.render(row) : row[col.key];
+          // responsive data-label for stacked cards
+          html += `<td data-label="${col.label}">${val == null ? '-' : val}</td>`;
+        } catch (err) {
+          console.warn(`Error rendering cell for row id ${row.id}`, err);
+          html += `<td data-label="${col.label}">—</td>`;
+        }
       }
       html += `</tr>`;
     }
 
-    html += `</tbody></table></div>`;
+    html += `</tbody></table>`;
 
     // Pagination
     if (totalPages > 1) {
       html += `
         <div class="table-pagination">
-          <span class="text-caption">Showing ${start + 1} to ${Math.min(start + this.perPage, this.data.length)} of ${this.data.length}</span>
-          <div style="display:flex;gap:var(--sp-2);">
+          <span class="text-caption">Showing ${start + 1} to ${Math.min(start + this.perPage, this.data.length)} of ${this.data.length} &bull; Page ${this.currentPage} of ${totalPages}</span>
+          <div class="table-pagination__controls">
             <button class="btn btn--secondary btn--sm" id="${this.container.id}-prev" ${this.currentPage === 1 ? 'disabled' : ''}>Previous</button>
             <button class="btn btn--secondary btn--sm" id="${this.container.id}-next" ${this.currentPage === totalPages ? 'disabled' : ''}>Next</button>
           </div>
         </div>
       `;
     }
+
+    html += `</div>`; // Close .table-container
 
     this.container.innerHTML = html;
 

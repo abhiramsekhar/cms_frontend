@@ -50,6 +50,14 @@
     let patient;
     let rxItems = []; // Array of currently built prescription items
 
+    const escapeHtml = (str) => {
+      if (str == null) return '';
+      return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+    };
+    const safeGet = (coll, id) => {
+      try { return db.getById(coll, id); } catch { return null; }
+    };
+
     initShell(['DOCTOR'], (session) => {
       currentUser = session;
       const urlParams = new URLSearchParams(window.location.search);
@@ -60,13 +68,13 @@
         return;
       }
 
-      consultData = consultations.getById(consultId);
+      consultData = safeGet('consultations', consultId);
       if (!consultData) {
         getPageContent().innerHTML = `<div class="error-state">Consultation not found.</div>`;
         return;
       }
 
-      patient = db.getById('patients', consultData.patientId);
+      patient = safeGet('patients', consultData.patientId) || { name: 'Unknown', allergies: [] };
 
       render();
     });
@@ -86,7 +94,7 @@
         ${patient.allergies && patient.allergies.length > 0 ? `
           <div class="allergy-banner">
             <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-alert-triangle"></use></svg>
-            <div><strong>Patient Allergies:</strong> ${patient.allergies.join(', ')}</div>
+            <div><strong>Patient Allergies:</strong> ${escapeHtml(patient.allergies.join(', '))}</div>
           </div>
         ` : ''}
 
@@ -95,12 +103,12 @@
           <div>
             <div class="card" style="margin-bottom:var(--sp-4);">
               <div class="card__body">
-                <h2 class="text-card-title" style="margin-bottom:4px;">${patient.name}</h2>
-                <div class="text-caption" style="margin-bottom:var(--sp-4);">${patient.mrn} • ${Format.age(patient.dateOfBirth)} yrs • ${patient.gender}</div>
+                <h2 class="text-card-title" style="margin-bottom:4px;">${escapeHtml(patient.name)}</h2>
+                <div class="text-caption" style="margin-bottom:var(--sp-4);">${escapeHtml(patient.mrn)} • ${escapeHtml(String(Format.age(patient.dateOfBirth)))} yrs • ${escapeHtml(patient.gender)}</div>
                 
                 <div style="display:flex; flex-direction:column; gap:var(--sp-2); font-size:0.875rem;">
-                  <div><strong>Blood Group:</strong> ${patient.bloodGroup || '-'}</div>
-                  <div><strong>Conditions:</strong> ${(patient.chronicConditions||[]).join(', ') || 'None'}</div>
+                  <div><strong>Blood Group:</strong> ${escapeHtml(patient.bloodGroup) || '-'}</div>
+                  <div><strong>Conditions:</strong> ${escapeHtml((patient.chronicConditions||[]).join(', ')) || 'None'}</div>
                 </div>
                 <div style="margin-top:var(--sp-4);">
                   <a href="../shared/patient-profile.html?id=${patient.id}" class="text-link text-body-sm" target="_blank">Open Full Profile ↗</a>
@@ -123,19 +131,19 @@
                 <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(100px, 1fr));gap:var(--sp-3);">
                   <div class="form-group">
                     <label class="form-group__label">BP (mmHg)</label>
-                    <input type="text" class="form-input" id="v-bp" value="${consultData.vitalSigns.bp || ''}" placeholder="120/80" ${isLocked ? 'disabled' : ''}>
+                    <input type="text" class="form-input" id="v-bp" value="${escapeHtml(consultData.vitalSigns.bp || '')}" placeholder="120/80" ${isLocked ? 'disabled' : ''}>
                   </div>
                   <div class="form-group">
                     <label class="form-group__label">Pulse (bpm)</label>
-                    <input type="number" class="form-input" id="v-pulse" value="${consultData.vitalSigns.pulse || ''}" placeholder="72" ${isLocked ? 'disabled' : ''}>
+                    <input type="number" class="form-input" id="v-pulse" value="${escapeHtml(consultData.vitalSigns.pulse || '')}" placeholder="72" ${isLocked ? 'disabled' : ''}>
                   </div>
                   <div class="form-group">
                     <label class="form-group__label">Temp (°F)</label>
-                    <input type="number" step="0.1" class="form-input" id="v-temp" value="${consultData.vitalSigns.temp || ''}" placeholder="98.6" ${isLocked ? 'disabled' : ''}>
+                    <input type="number" step="0.1" class="form-input" id="v-temp" value="${escapeHtml(consultData.vitalSigns.temp || '')}" placeholder="98.6" ${isLocked ? 'disabled' : ''}>
                   </div>
                   <div class="form-group">
                     <label class="form-group__label">SpO2 (%)</label>
-                    <input type="number" class="form-input" id="v-spo2" value="${consultData.vitalSigns.spo2 || ''}" placeholder="99" ${isLocked ? 'disabled' : ''}>
+                    <input type="number" class="form-input" id="v-spo2" value="${escapeHtml(consultData.vitalSigns.spo2 || '')}" placeholder="99" ${isLocked ? 'disabled' : ''}>
                   </div>
                 </div>
               </div>
@@ -145,15 +153,15 @@
                 <div class="panel-title">Clinical Notes</div>
                 <div class="form-group">
                   <label class="form-group__label">Chief Complaint / Symptoms *</label>
-                  <input type="text" class="form-input" id="c-symptoms" value="${consultData.symptoms || ''}" required ${isLocked ? 'disabled' : ''}>
+                  <input type="text" class="form-input" id="c-symptoms" value="${escapeHtml(consultData.symptoms || '')}" required ${isLocked ? 'disabled' : ''}>
                 </div>
                 <div class="form-group">
                   <label class="form-group__label">Diagnosis</label>
-                  <input type="text" class="form-input" id="c-diagnosis" value="${consultData.diagnosis || ''}" ${isLocked ? 'disabled' : ''}>
+                  <input type="text" class="form-input" id="c-diagnosis" value="${escapeHtml(consultData.diagnosis || '')}" ${isLocked ? 'disabled' : ''}>
                 </div>
                 <div class="form-group">
                   <label class="form-group__label">Clinical Notes</label>
-                  <textarea class="form-input" id="c-notes" rows="4" ${isLocked ? 'disabled' : ''}>${consultData.notes || ''}</textarea>
+                  <textarea class="form-input" id="c-notes" rows="4" ${isLocked ? 'disabled' : ''}>${escapeHtml(consultData.notes || '')}</textarea>
                 </div>
               </div>
 
@@ -186,8 +194,8 @@
                   <div class="addendum-list">
                     ${consultData.addendas.map(a => `
                       <div class="addendum">
-                        <div class="text-body-sm">${a.text}</div>
-                        <div class="text-caption" style="margin-top:4px;">Added by ${a.addedBy} on ${Format.datetime(a.addedAt)}</div>
+                        <div class="text-body-sm">${escapeHtml(a.text)}</div>
+                        <div class="text-caption" style="margin-top:4px;">Added by ${escapeHtml(a.addedBy)} on ${escapeHtml(Format.datetime(a.addedAt))}</div>
                       </div>
                     `).join('')}
                   </div>
@@ -222,7 +230,7 @@
                     ${Badge.status(rx.status)}
                   </div>
                   <ul style="padding-left:var(--sp-4); margin:0; font-size:0.875rem;">
-                    ${rx.items.map(i => `<li>${i.name} - ${i.dosage}</li>`).join('')}
+                    ${rx.items.map(i => `<li>${escapeHtml(i.name)} - ${escapeHtml(i.dosage)}</li>`).join('')}
                   </ul>
                 </div>
               `).join('')}
@@ -245,10 +253,10 @@
             <div class="card__header"><span class="text-card-title">Lab Orders (Today)</span></div>
             <div class="card__body" style="padding-top:0;">
               ${labs.map(l => {
-                const test = db.getById('labCatalog', l.testId);
+                const test = safeGet('labCatalog', l.testId);
                 return `
                   <div style="border-bottom:1px solid var(--border); padding:var(--sp-2) 0; display:flex; justify-content:space-between;">
-                    <span class="text-body-sm">${test.name}</span>
+                    <span class="text-body-sm">${escapeHtml(test ? test.name : 'Unknown')}</span>
                     ${Badge.status(l.status)}
                   </div>
                 `;
@@ -354,48 +362,47 @@
         list.innerHTML = rxItems.map((item, i) => `
           <div class="rx-item">
             <div class="rx-item__details">
-              <strong>${item.name}</strong><br>
-              <span class="text-body-sm">${item.dosage}, ${item.frequency}, for ${item.duration}</span>
+              <strong>${escapeHtml(item.name)}</strong><br>
+              <span class="text-body-sm">${escapeHtml(item.dosage)}, ${escapeHtml(item.frequency)}, for ${escapeHtml(item.duration)} (Qty: ${escapeHtml(item.quantity)})</span>
             </div>
-            <button class="btn btn--danger btn--sm btn--icon" type="button" onclick="window.removeRxItem(${i})">
+            <button class="btn btn--danger btn--sm btn--icon btn-remove-rx" data-index="${i}" type="button" aria-label="Remove medicine">
               <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-x"></use></svg>
             </button>
           </div>
         `).join('');
       };
-      window.removeRxItem = (i) => { rxItems.splice(i, 1); renderRxItems(); };
 
       const content = `
-        <div style="display:flex;gap:var(--sp-4);margin-bottom:var(--sp-4);">
-          <div class="form-group" style="flex:2;">
-            <label class="form-group__label">Medicine</label>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--sp-4);margin-bottom:var(--sp-4);">
+          <div class="form-group" style="flex:1 1 200px;">
+            <label class="form-group__label">Medicine *</label>
             <select class="form-input" id="rx-med">
               <option value="">Select...</option>
               ${meds.map(m => `<option value="${m.id}">${m.name} (${m.genericName})</option>`).join('')}
             </select>
           </div>
-          <div class="form-group" style="flex:1;">
-            <label class="form-group__label">Dosage</label>
+          <div class="form-group" style="flex:1 1 120px;">
+            <label class="form-group__label">Dosage *</label>
             <input type="text" class="form-input" id="rx-dos" placeholder="e.g. 500mg">
           </div>
-          <div class="form-group" style="flex:1;">
-            <label class="form-group__label">Frequency</label>
+          <div class="form-group" style="flex:1 1 120px;">
+            <label class="form-group__label">Frequency *</label>
             <input type="text" class="form-input" id="rx-freq" placeholder="e.g. 1-0-1">
           </div>
-          <div class="form-group" style="flex:1;">
-            <label class="form-group__label">Duration</label>
+          <div class="form-group" style="flex:1 1 120px;">
+            <label class="form-group__label">Duration *</label>
             <input type="text" class="form-input" id="rx-dur" placeholder="e.g. 5 days">
           </div>
-          <div class="form-group" style="flex:1;">
-            <label class="form-group__label">Qty</label>
-            <input type="number" class="form-input" id="rx-qty" value="10">
+          <div class="form-group" style="flex:1 1 80px;">
+            <label class="form-group__label">Qty *</label>
+            <input type="number" class="form-input" id="rx-qty" value="10" min="1">
           </div>
-          <div style="display:flex;align-items:flex-end;margin-bottom:12px;">
-            <button class="btn btn--secondary" type="button" id="rx-add-btn">Add</button>
+          <div style="display:flex;align-items:flex-end;margin-bottom:12px;flex:1 1 100%;">
+            <button class="btn btn--secondary" type="button" id="rx-add-btn" style="width:100%">Add Medicine</button>
           </div>
         </div>
         <div class="panel-title">Current Prescription</div>
-        <div id="rx-item-list"></div>
+        <div id="rx-item-list" style="max-height: 200px; overflow-y: auto;"></div>
       `;
 
       const actions = `
@@ -408,20 +415,45 @@
 
       document.getElementById('rxb-cancel').addEventListener('click', m.close);
       
+      document.getElementById('rx-item-list').addEventListener('click', (e) => {
+        const removeBtn = e.target.closest('.btn-remove-rx');
+        if (removeBtn) {
+          rxItems.splice(removeBtn.dataset.index, 1);
+          renderRxItems();
+        }
+      });
+
       document.getElementById('rx-add-btn').addEventListener('click', () => {
         const medId = document.getElementById('rx-med').value;
-        if (!medId) return;
+        const dos = document.getElementById('rx-dos').value.trim();
+        const freq = document.getElementById('rx-freq').value.trim();
+        const dur = document.getElementById('rx-dur').value.trim();
+        const qty = parseInt(document.getElementById('rx-qty').value);
+
+        if (!medId || !dos || !freq || !dur || !qty || qty <= 0) {
+          Toast.show('Please fill all required fields correctly.', 'error');
+          return;
+        }
+
+        if (rxItems.some(item => item.medicineId === medId)) {
+          Toast.show('Medicine is already added.', 'error');
+          return;
+        }
+
         const med = meds.find(m => m.id === medId);
         rxItems.push({
           medicineId: medId,
           name: med.name,
-          dosage: document.getElementById('rx-dos').value || 'As directed',
-          frequency: document.getElementById('rx-freq').value || 'As directed',
-          duration: document.getElementById('rx-dur').value || '-',
-          quantity: parseInt(document.getElementById('rx-qty').value) || 1
+          dosage: dos,
+          frequency: freq,
+          duration: dur,
+          quantity: qty
         });
         document.getElementById('rx-med').value = '';
         document.getElementById('rx-dos').value = '';
+        document.getElementById('rx-freq').value = '';
+        document.getElementById('rx-dur').value = '';
+        document.getElementById('rx-qty').value = '10';
         renderRxItems();
       });
 

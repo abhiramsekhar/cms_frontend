@@ -55,7 +55,8 @@ export const STOCK_ENTRY_TYPE = ['PURCHASE', 'DISPENSE', 'ADJUSTMENT', 'RETURN',
 
 /* Notification types */
 export const NOTIFICATION_TYPE = [
-  'APPOINTMENT', 'LAB_RESULT', 'STOCK_ALERT', 'PRESCRIPTION', 'SYSTEM', 'BILLING'
+  'APPOINTMENT', 'LAB_RESULT', 'STOCK_ALERT', 'PRESCRIPTION', 'SYSTEM', 'BILLING',
+  'LAB_ORDER', 'CRITICAL_RESULT', 'RX_REJECTED'
 ];
 
 /**
@@ -158,6 +159,7 @@ export const SCHEMAS = {
     diagnosis:     { required: false, type: 'string'  },
     notes:         { required: false, type: 'string'  },
     vitalSigns:    { required: false, type: 'object'  },
+    isCompleted:   { required: false, type: 'boolean' },
     createdAt:     { required: true,  type: 'string'  },
     updatedAt:     { required: true,  type: 'string'  },
     _v:            { required: true,  type: 'number'  },

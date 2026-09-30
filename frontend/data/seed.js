@@ -200,11 +200,12 @@ export async function seed() {
   const completedAppts = appointments.filter(a => a.status === 'COMPLETED');
   completedAppts.forEach((a, i) => {
     consultations.push({
-      id: `consult-${String(i+1).padStart(3,'0')}`,
+      id: `consult-${a.id.split('-')[1]}`,
       appointmentId: a.id, patientId: a.patientId, doctorId: a.doctorId,
       symptoms: a.reason, diagnosis: 'Clinical evaluation performed',
       notes: 'Patient counselled. Follow-up advised as needed.',
       vitalSigns: { bp: '120/80', pulse: 72 + (i % 10), temp: 98.4 + (i % 3)*0.2, spo2: 97 + (i % 3) },
+      isCompleted: true,
       createdAt: iso(parseInt(a.date.slice(8,10)) - parseInt(d(0).slice(8,10)), 10), updatedAt: a.updatedAt, _v: 1,
     });
   });
@@ -460,13 +461,17 @@ export async function seed() {
   db.replaceAll('notifications',  notifications);
   db.replaceAll('auditLog',       []);
   db.replaceAll('settings',       settings);
+  localStorage.setItem('clinova.v1.seedVersion', '1.1');
 }
 
 /**
- * Check if seed data exists.
+ * Check if seed data exists and matches the current version.
  */
 export function isSeeded() {
   try {
+    const version = localStorage.getItem('clinova.v1.seedVersion');
+    if (version !== '1.1') return false;
+    
     const users = JSON.parse(localStorage.getItem('clinova.v1.users') || '[]');
     return users.length > 0;
   } catch { return false; }

@@ -44,12 +44,17 @@
         </div>
       `;
 
+      const escapeHtml = (str) => {
+        if (str == null) return '';
+        return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+      };
+
       // Setup Table
       const columns = [
-        { key: 'mrn', label: 'MRN', sortable: true },
-        { key: 'name', label: 'Patient Name', sortable: true, render: r => `<strong>${r.name}</strong><br><span class="text-caption">${r.gender}, ${Format.age(r.dateOfBirth)} yrs</span>` },
-        { key: 'bloodGroup', label: 'Blood Group', sortable: true, render: r => r.bloodGroup || '-' },
-        { key: 'chronicConditions', label: 'Chronic Conditions', sortable: false, render: r => (r.chronicConditions || []).join(', ') || '-' },
+        { key: 'mrn', label: 'MRN', sortable: true, render: r => escapeHtml(r.mrn) },
+        { key: 'name', label: 'Patient Name', sortable: true, render: r => `<strong>${escapeHtml(r.name)}</strong><br><span class="text-caption">${escapeHtml(r.gender)}, ${escapeHtml(String(Format.age(r.dateOfBirth)))} yrs</span>` },
+        { key: 'bloodGroup', label: 'Blood Group', sortable: true, render: r => escapeHtml(r.bloodGroup) || '-' },
+        { key: 'chronicConditions', label: 'Chronic Conditions', sortable: false, render: r => escapeHtml((r.chronicConditions || []).join(', ')) || '-' },
         { key: 'actions', label: '', width: '100px', render: r => `
           <a href="../shared/patient-profile.html?id=${r.id}" class="btn btn--secondary btn--sm">View Profile</a>
         `}

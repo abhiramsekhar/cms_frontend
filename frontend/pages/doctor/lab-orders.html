@@ -53,14 +53,25 @@
         </div>
       `;
 
+      const escapeHtml = (str) => {
+        if (str == null) return '';
+        return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+      };
+      const safeGet = (coll, id) => {
+        try { return db.getById(coll, id); } catch { return null; }
+      };
+
       // Setup Table
       const columns = [
         { key: 'createdAt', label: 'Date', sortable: true, render: r => Format.date(r.createdAt) },
         { key: 'patientId', label: 'Patient', sortable: true, render: r => {
-          const p = db.getById('patients', r.patientId);
-          return `<strong>${p.name}</strong>`;
+          const p = safeGet('patients', r.patientId);
+          return p ? `<strong>${escapeHtml(p.name)}</strong>` : `<span style="color:var(--muted)">Patient unavailable</span>`;
         }},
-        { key: 'testId', label: 'Test', sortable: true, render: r => db.getById('labCatalog', r.testId).name },
+        { key: 'testId', label: 'Test', sortable: true, render: r => {
+          const t = safeGet('labCatalog', r.testId);
+          return t ? escapeHtml(t.name) : 'Unknown Test';
+        } },
         { key: 'priority', label: 'Priority', sortable: true, render: r => Badge.priority(r.priority) },
         { key: 'status', label: 'Status', sortable: true, render: r => Badge.status(r.status) },
         { key: 'actions', label: '', width: '80px', render: r => `
@@ -89,9 +100,18 @@
     }
 
     function showLab(id) {
-      const order = db.getById('labOrders', id);
-      const test = db.getById('labCatalog', order.testId);
-      const p = db.getById('patients', order.patientId);
+      const escapeHtml = (str) => {
+        if (str == null) return '';
+        return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+      };
+      const safeGet = (coll, id) => {
+        try { return db.getById(coll, id); } catch { return null; }
+      };
+      
+      const order = safeGet('labOrders', id);
+      if (!order) return;
+      const test = safeGet('labCatalog', order.testId) || { name: 'Unknown Test' };
+      const p = safeGet('patients', order.patientId) || { name: 'Unknown Patient', mrn: '-' };
       
       let resHtml = '';
       if (order.status === 'COMPLETED' && order.results) {
@@ -103,29 +123,29 @@
             <tbody>
               ${order.results.map(r => `
                 <tr>
-                  <td>${r.parameter}</td>
-                  <td style="${r.isAbnormal ? 'color:var(--danger);font-weight:bold;' : ''}">${r.value} ${r.unit}</td>
-                  <td class="text-caption">${r.referenceRange}</td>
+                  <td>${escapeHtml(r.parameter)}</td>
+                  <td style="${r.isAbnormal ? 'color:var(--danger);font-weight:bold;' : ''}">${escapeHtml(r.value)} ${escapeHtml(r.unit)}</td>
+                  <td class="text-caption">${escapeHtml(r.referenceRange)}</td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
         </div>
-          <div class="text-caption" style="margin-top:var(--sp-2);">Verified by Tech ID: ${order.technicianId} at ${Format.datetime(order.completedAt)}</div>
+          <div class="text-caption" style="margin-top:var(--sp-2);">Verified by Tech ID: ${escapeHtml(order.technicianId)} at ${escapeHtml(Format.datetime(order.completedAt))}</div>
         `;
       } else {
-        resHtml = `<div class="text-caption" style="margin-top:var(--sp-4);">Results are not yet available. Status: ${order.status.replace('_',' ')}</div>`;
+        resHtml = `<div class="text-caption" style="margin-top:var(--sp-4);">Results are not yet available. Status: ${escapeHtml(order.status.replace('_',' '))}</div>`;
       }
 
       const content = `
         <div style="margin-bottom:var(--sp-4); display:flex; justify-content:space-between;">
           <div>
             <div class="text-caption">Patient</div>
-            <div class="text-body"><strong>${p.name}</strong> (${p.mrn})</div>
+            <div class="text-body"><strong>${escapeHtml(p.name)}</strong> (${escapeHtml(p.mrn)})</div>
           </div>
           <div>
             <div class="text-caption">Test</div>
-            <div class="text-body"><strong>${test.name}</strong></div>
+            <div class="text-body"><strong>${escapeHtml(test.name)}</strong></div>
           </div>
         </div>
         ${order.isCritical ? `

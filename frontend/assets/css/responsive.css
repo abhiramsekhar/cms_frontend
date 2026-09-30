@@ -88,6 +88,10 @@
         grid-template-columns: 1fr 360px;
     }
 
+    .dashboard-grid.doctor-dashboard {
+        grid-template-columns: 2fr 1fr;
+    }
+
     .split {
         flex-direction: row;
     }
@@ -107,8 +111,54 @@
         align-items: flex-end;
     }
 
-    .hamburger {
+    body:not(.role-doctor) .hamburger {
         display: none;
+    }
+
+    body.role-doctor.is-sidebar-collapsed .sidebar {
+        width: 72px;
+    }
+
+    body.role-doctor.is-sidebar-collapsed .header {
+        left: 72px;
+    }
+
+    body.role-doctor.is-sidebar-collapsed .main {
+        margin-left: 72px;
+    }
+
+    body.role-doctor.is-sidebar-collapsed .sidebar__brand-text,
+    body.role-doctor.is-sidebar-collapsed .nav-group__label,
+    body.role-doctor.is-sidebar-collapsed .nav-item span,
+    body.role-doctor.is-sidebar-collapsed .sidebar__footer span {
+        display: none;
+    }
+
+    body.role-doctor.is-sidebar-collapsed .nav-item {
+        justify-content: center;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    body.role-doctor.is-sidebar-collapsed .nav-item .icon {
+        margin-right: 0;
+    }
+
+    body.role-doctor.is-sidebar-collapsed .sidebar__footer {
+        justify-content: center;
+    }
+
+    body.role-doctor.is-sidebar-collapsed .sidebar__footer .icon {
+        margin-right: 0;
+    }
+
+    body.role-doctor.is-sidebar-collapsed .sidebar__brand {
+        padding: var(--sp-4) 0;
+        justify-content: center;
+    }
+
+    body.role-doctor.is-sidebar-collapsed .sidebar__logo {
+        margin: 0;
     }
 
     .login-layout {
