@@ -368,15 +368,6 @@
       const searchInput = document.getElementById('rx-med-search');
       const medSelect = document.getElementById('rx-med');
       
-      let selectedMedicineId = '';
-      const updateSelectedMed = () => {
-        if (medSelect.value) {
-          selectedMedicineId = medSelect.value;
-        }
-      };
-      medSelect.addEventListener('change', updateSelectedMed);
-      medSelect.addEventListener('click', updateSelectedMed);
-      
       const renderMedicineOptions = (query = '') => {
         const normalizedQuery = query.trim().toLowerCase();
         const filtered = allMeds.filter(med => 
@@ -388,15 +379,13 @@
             `<option value="${m.id}">${window.escapeHtml(m.name)} (${window.escapeHtml(m.genericName)}) - ${m.avail} (${m.stock})</option>`
           ).join('')}
         `;
-        selectedMedicineId = '';
-        medSelect.selectedIndex = 0;
+        medSelect.value = '';
       };
 
       // Initial render
       renderMedicineOptions();
 
       searchInput.addEventListener('input', () => {
-        selectedMedicineId = '';
         renderMedicineOptions(searchInput.value);
       });
 
@@ -411,24 +400,32 @@
       });
 
       document.getElementById('rx-add-btn').addEventListener('click', () => {
-        const medId = selectedMedicineId;
+        const medId = medSelect.value;
+        if (!medId) {
+          Toast.show('Please select a medicine.', 'error');
+          return;
+        }
         const dos = document.getElementById('rx-dos').value.trim();
         const freq = document.getElementById('rx-freq').value.trim();
         const dur = document.getElementById('rx-dur').value.trim();
         const qty = parseInt(document.getElementById('rx-qty').value);
         const inst = document.getElementById('rx-inst').value.trim();
 
-        if (!medId || !dos || !freq || !dur || !qty || qty <= 0) {
+        if (!dos || !freq || !dur || !qty || qty <= 0) {
           Toast.show('Please fill all required fields correctly.', 'error');
           return;
         }
 
-        if (rxItems.some(item => item.medicineId === medId)) {
+        if (rxItems.some(item => String(item.medicineId) === String(medId))) {
           Toast.show('Medicine is already added.', 'error');
           return;
         }
 
-        const med = allMeds.find(med => med.id === medId);
+        const med = allMeds.find(m => String(m.id) === String(medId));
+        if (!med) {
+          Toast.show('Selected medicine could not be found.', 'error');
+          return;
+        }
         if (med.stock === 0) {
           Toast.show('Warning: This medicine is out of stock in the pharmacy.', 'error');
         }
@@ -443,7 +440,6 @@
           instructions: inst || undefined
         });
         document.getElementById('rx-med').value = '';
-        selectedMedicineId = '';
         document.getElementById('rx-dos').value = '';
         document.getElementById('rx-freq').value = '';
         document.getElementById('rx-dur').value = '';
