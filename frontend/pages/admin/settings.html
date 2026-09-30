@@ -144,8 +144,8 @@
 
               <div style="border-top:1px solid var(--border); padding-top:var(--sp-4);">
                 <div class="text-body" style="font-weight:600; margin-bottom:4px; color:var(--danger);">Factory Reset</div>
-                <div class="text-caption" style="margin-bottom:8px;">Erase all data and generate fresh deterministic demo data.</div>
-                <button class="btn btn--danger" id="btn-reset" style="width:100%;">Reset to Demo Data</button>
+                <div class="text-caption" style="margin-bottom:8px;">Erase all data and generate fresh deterministic system data.</div>
+                <button class="btn btn--danger" id="btn-reset" style="width:100%;">Reset to System Data</button>
               </div>
             </div>
           </div>
@@ -229,7 +229,7 @@
       document.getElementById('btn-reset').addEventListener('click', () => {
         Modal.confirm({
           title: 'DANGER: Factory Reset',
-          message: 'This will irreversibly delete ALL current data and generate a new set of demo data. Type "RESET" to confirm.',
+          message: 'This will irreversibly delete ALL current data and generate a new set of system data. Type "RESET" to confirm.',
           confirmText: 'Reset Data',
           onConfirm: () => {
             const input = document.getElementById('reset-confirm-input');

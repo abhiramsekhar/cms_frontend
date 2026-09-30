@@ -46,10 +46,10 @@
       </div>
       <div class="card__body" style="display:flex;flex-direction:column;gap:var(--sp-4);">
         <div>
-          <p class="text-body-sm" style="margin-bottom:var(--sp-3);">Reset all localStorage data to the original demo seed. This will log you out.</p>
+          <p class="text-body-sm" style="margin-bottom:var(--sp-3);">Reset all localStorage data to the original system seed. This will log you out.</p>
           <button class="btn btn--danger" id="reset-btn">
             <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-refresh-cw"></use></svg>
-            Reset to Demo Data
+            Reset to System Data
           </button>
         </div>
         <div id="reset-status" style="display:none;"></div>
@@ -107,7 +107,7 @@
         statusEl.innerHTML = `
           <div class="form-banner form-banner--success">
             <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-check-circle"></use></svg>
-            <span>Demo data restored successfully. Redirecting to login…</span>
+            <span>System data restored successfully. Redirecting to login…</span>
           </div>
         `;
         setTimeout(() => {
@@ -123,7 +123,7 @@
           </div>
         `;
         btn.disabled = false;
-        btn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-refresh-cw"></use></svg> Reset to Demo Data';
+        btn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-refresh-cw"></use></svg> Reset to System Data';
       }
     });
 

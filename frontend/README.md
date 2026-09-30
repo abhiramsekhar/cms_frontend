@@ -48,16 +48,17 @@ frontend/
    \`\`\`
 3. Navigate to \`http://localhost:8092/frontend/index.html\` in your browser.
 
-## Demo Accounts
+## System Accounts
 
-The application includes a deterministic demo seed. The following credentials can be used to log in (password for all is \`pass123\`):
+The application includes a deterministic system seed. The following credentials can be used to log in:
 
-- **Admin**: \`admin@clinova.com\`
-- **Doctor**: \`sarah@clinova.com\`
-- **Receptionist**: \`jane@clinova.com\`
-- **Pharmacist**: \`mike@clinova.com\`
-- **Lab Tech**: \`emily@clinova.com\`
+- **Admin**: `admin` / `Admin@123`
+- **Doctor**: `dr.sarah` / `Doctor@123`
+- **Receptionist**: `reception1` / `Reception@123`
+- **Pharmacist**: `pharmacy1` / `Pharmacy@123`
+- **Lab Tech**: `lab1` / `Lab@123`
 
 ## Resetting Data
 
-To start fresh, log in as Admin, go to **Settings > Data Management**, and click **Reset to Demo Data**. Alternatively, navigate to \`/frontend/pages/shared/devtools.html\` and click the Reset button.
+To start fresh, log in as Admin, go to **Settings > Data Management**, and click **Reset to System Data**. Alternatively, navigate to `/frontend/pages/shared/devtools.html` and click the Reset button.
+

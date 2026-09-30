@@ -141,7 +141,7 @@ export function renderSidebar(container, role) {
     </nav>
     <div class="sidebar__footer">
       ${icon('icon-shield')}
-      <span>v1.0 · Demo</span>
+      <span>v1.0</span>
     </div>
   `;
 
