@@ -200,7 +200,7 @@ export async function seed() {
   const completedAppts = appointments.filter(a => a.status === 'COMPLETED');
   completedAppts.forEach((a, i) => {
     consultations.push({
-      id: `consult-${String(i+1).padStart(3,'0')}`,
+      id: `consult-${a.id.split('-')[1]}`,
       appointmentId: a.id, patientId: a.patientId, doctorId: a.doctorId,
       symptoms: a.reason, diagnosis: 'Clinical evaluation performed',
       notes: 'Patient counselled. Follow-up advised as needed.',
