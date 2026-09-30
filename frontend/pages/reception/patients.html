@@ -265,14 +265,68 @@
           guardianPhone: result.data.guardianPhone
         };
 
+        // 1) Check details + duplicates BEFORE asking for money
         try {
-          const p = patients.register(data, userId);
-          Toast.show(`Patient ${p.name} registered successfully with MRN ${p.mrn}.`);
-          patientTable.updateData(patients.list());
-          m.close();
+          patients.precheck(data);
         } catch (err) {
           Toast.show(err.message, 'error');
+          return;
         }
+
+        // 2) Move to the payment step
+        m.close();
+        showPaymentModal(data, userId);
+      });
+    }
+
+    function showPaymentModal(data, userId) {
+      const fee = patients.getRegistrationFee();
+      const content = `
+        <p>Registration fee for <strong>${data.name}</strong></p>
+        <h2 style="margin:var(--sp-3) 0;">${Format.money(fee)}</h2>
+        <label class="form-group__label">Payment method *</label>
+        <select class="form-input" id="reg-pay-method">
+          <option value="CASH">Cash</option>
+          <option value="CARD">Card</option>
+          <option value="UPI">UPI</option>
+        </select>`;
+      const actions = `
+        <button class="btn btn--secondary" id="pay-cancel">Cancel</button>
+        <button class="btn btn--primary" id="pay-confirm">Collect &amp; Register</button>`;
+
+      const pm = Modal.show({ title: 'Registration Fee', content, size: 'sm', actions });
+      document.getElementById('pay-cancel').addEventListener('click', pm.close);
+
+      document.getElementById('pay-confirm').addEventListener('click', () => {
+        const btn = document.getElementById('pay-confirm');
+        btn.disabled = true;
+        try {
+          const method = document.getElementById('reg-pay-method').value;
+          const { patient } = patients.registerAndPay(data, { method }, userId);
+          Toast.show(`Fee paid. ${patient.name} registered with MRN ${patient.mrn}.`);
+          patientTable.updateData(patients.list());
+          pm.close();
+          showBookPrompt(patient);
+        } catch (err) {
+          Toast.show(err.message, 'error');
+          btn.disabled = false;
+        }
+      });
+    }
+
+    function showBookPrompt(patient) {
+      const content = `
+        <p><strong>${patient.name}</strong> is registered.</p>
+        <h2 style="margin:var(--sp-3) 0;">MRN: ${patient.mrn}</h2>
+        <p>Do you want to book an appointment now? If not, you can book later from the Appointments page.</p>`;
+      const actions = `
+        <button class="btn btn--secondary" id="book-later">Book Later</button>
+        <button class="btn btn--primary" id="book-now">Book Appointment Now</button>`;
+
+      const bm = Modal.show({ title: 'Registration Complete', content, size: 'sm', actions });
+      document.getElementById('book-later').addEventListener('click', bm.close);
+      document.getElementById('book-now').addEventListener('click', () => {
+        window.location.href = 'appointments.html?patientId=' + encodeURIComponent(patient.id);
       });
     }
   </script>
