@@ -21,11 +21,22 @@
     import { initShell, getPageContent } from '../../components/app-shell.js';
     import { db } from '../../data/db.js';
     import { DataTable, Format, Badge } from '../../components/ui.js';
-    import { reports } from '../../api/reports.js';
+    import { appointments, todayStr } from '../../api/appointments.js';
+    import { billing } from '../../api/billing.js';
 
     initShell(['RECEPTIONIST'], (session) => {
       const page = getPageContent();
-      const stats = reports.getReceptionStats();
+      // Stats use the LOCAL date (the shared reports helper uses UTC, which is wrong in India before 5:30 AM)
+      const todayAppts = appointments.list({ date: todayStr() });
+      const allBills = billing.list();
+      const stats = {
+        checkedIn: todayAppts.filter(a => a.status === 'CHECKED_IN').length,
+        scheduled: todayAppts.filter(a => a.status === 'SCHEDULED').length,
+        completed: todayAppts.filter(a => a.status === 'COMPLETED').length,
+        unpaidBills: allBills.filter(b => b.status === 'UNPAID' || b.status === 'PARTIAL').length,
+        todayApptsList: todayAppts,
+        recentBillsList: allBills.slice(0, 10)
+      };
 
       page.innerHTML = `
         <div class="page-header">
@@ -84,7 +95,7 @@
                       <strong>${(() => { try { return db.getById('patients', b.patientId).name; } catch(e){ return 'Unknown Patient'; } })()}</strong>
                       ${Badge.payment(b.status)}
                     </div>
-                    <div class="text-body-sm">₹${Format.money(b.totalAmount)}</div>
+                    <div class="text-body-sm">${Format.money(b.totalAmount)}</div>
                   </div>
                 `).join('')}
                 <div style="margin-top:var(--sp-2);"><a href="billing.html" class="text-link text-body-sm">View all bills</a></div>
@@ -97,7 +108,7 @@
       // Setup Table
       const columns = [
         { key: 'tokenNumber', label: 'Token', width:'80px', sortable: true, render: r => `<strong>#${r.tokenNumber}</strong>` },
-        { key: 'time', label: 'Time', width:'100px', sortable: true, render: r => Format.time(r.time) },
+        { key: 'time', label: 'Time', width:'110px', sortable: true, render: r => `${Format.time(r.time)}${r.mode ? `<br><span class="text-caption">${r.mode === 'WALK_IN' ? 'Walk-in' : 'Prior'}</span>` : ''}` },
         { key: 'patientId', label: 'Patient', sortable: true, render: r => `<strong>${(() => { try { return db.getById('patients', r.patientId).name; } catch(e){ return 'Unknown'; } })()}</strong>` },
         { key: 'doctorId', label: 'Doctor', sortable: true, render: r => { try { return db.getById('staff', r.doctorId).name; } catch(e){ return 'Unknown'; } } },
         { key: 'status', label: 'Status', sortable: true, render: r => Badge.status(r.status) }

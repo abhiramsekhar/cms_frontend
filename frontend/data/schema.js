@@ -88,6 +88,7 @@ export const SCHEMAS = {
     phone:         { required: true,  type: 'string'  },
     email:         { required: false, type: 'string'  },
     avatarUrl:     { required: false, type: 'string'  },
+    consultationFee: { required: false, type: 'number' }, // per-doctor fee in paise (optional; overrides department fee)
     isActive:      { required: true,  type: 'boolean' },
     joinedAt:      { required: true,  type: 'string'  },
     createdAt:     { required: true,  type: 'string'  },
@@ -100,6 +101,7 @@ export const SCHEMAS = {
     name:          { required: true,  type: 'string'  },
     code:          { required: true,  type: 'string'  },
     headDoctorId:  { required: false, type: 'string'  },
+    defaultFee:    { required: false, type: 'number'  }, // consultation fee in paise (optional)
     isActive:      { required: true,  type: 'boolean' },
     createdAt:     { required: true,  type: 'string'  },
     updatedAt:     { required: true,  type: 'string'  },
@@ -138,6 +140,10 @@ export const SCHEMAS = {
     reason:        { required: false, type: 'string'  },
     notes:         { required: false, type: 'string'  },
     tokenNumber:   { required: false, type: 'number'  },
+    mode:          { required: false, type: 'string', enum: ['WALK_IN', 'PRIOR'] }, // how it was booked
+    slotIndex:     { required: false, type: 'number'  }, // 0 = first slot of the day
+    billId:        { required: false, type: 'string'  }, // consultation bill
+    checkedInAt:   { required: false, type: 'string'  },
     createdAt:     { required: true,  type: 'string'  },
     updatedAt:     { required: true,  type: 'string'  },
     _v:            { required: true,  type: 'number'  },

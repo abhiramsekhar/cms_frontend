@@ -67,6 +67,7 @@
                 <option value="UNPAID">Unpaid</option>
                 <option value="PARTIAL">Partial</option>
                 <option value="PAID">Paid</option>
+                <option value="CANCELLED">Cancelled / Refunded</option>
               </select>
             </div>
           </div>
@@ -79,12 +80,12 @@
         { key: 'id', label: 'Invoice #', sortable: true, render: r => `<strong>${r.id}</strong>` },
         { key: 'createdAt', label: 'Date', sortable: true, render: r => Format.date(r.createdAt) },
         { key: 'patientId', label: 'Patient', sortable: true, render: r => {
-          const p = db.getById('patients', r.patientId);
+          let p; try { p = db.getById('patients', r.patientId); } catch (e) { p = { name: 'Unknown', mrn: '' }; }
           return `<strong>${p.name}</strong><br><span class="text-caption">${p.mrn}</span>`;
         }},
         { key: 'totalAmount', label: 'Amount', sortable: true, render: r => Format.money(r.totalAmount) },
         { key: 'balance', label: 'Balance', sortable: false, render: r => {
-          const bal = r.totalAmount - r.paidAmount;
+          const bal = r.status === 'CANCELLED' ? 0 : r.totalAmount - r.paidAmount;
           return bal > 0 ? `<span style="color:var(--danger);font-weight:600;">${Format.money(bal)}</span>` : '-';
         }},
         { key: 'status', label: 'Status', sortable: true, render: r => Badge.status(r.status) },
@@ -121,6 +122,11 @@
       const bill = billing.getById(id);
       const p = db.getById('patients', bill.patientId);
       const balance = bill.totalAmount - bill.paidAmount;
+      const payHistory = billing.paymentsFor(bill.id).map(pm => `
+        <div style="display:flex;justify-content:space-between;padding:2px 0;" class="text-body-sm">
+          <span>${Format.datetime(pm.createdAt)} · ${pm.method}</span>
+          <span>${pm.amount < 0 ? '−' : ''}${Format.money(Math.abs(pm.amount))}</span>
+        </div>`).join('');
 
       const content = `
         <div id="invoice-print-area" class="invoice">
@@ -160,6 +166,10 @@
               `).join('')}
             </tbody>
           </table>
+          ${payHistory ? `<div style="margin-bottom:var(--sp-6);">
+            <div class="text-caption" style="margin-bottom:var(--sp-2);">Payments</div>
+            ${payHistory}
+          </div>` : ''}
           <div class="invoice__summary">
             <div class="invoice__summary-row">
               <span>Subtotal:</span>
@@ -171,7 +181,7 @@
             </div>
             <div class="invoice__summary-row invoice__summary-row--total">
               <span>Balance Due:</span>
-              <span style="color:var(--danger);">${Format.money(balance)}</span>
+              <span style="color:var(--danger);">${Format.money(bill.status === 'CANCELLED' ? 0 : balance)}</span>
             </div>
           </div>
         </div>
