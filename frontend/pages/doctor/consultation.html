@@ -167,21 +167,24 @@
 
               ${!isLocked ? `
                 <div class="panel-section">
-                  <div style="display:flex;gap:var(--sp-3);">
-                    <button type="button" class="btn btn--secondary" id="btn-save-draft">Save Draft</button>
-                    <button type="button" class="btn btn--primary" id="btn-complete">
-                      <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-lock"></use></svg>
-                      Complete & Lock
-                    </button>
-                    <div style="flex:1;"></div>
-                    <button type="button" class="btn btn--secondary" id="btn-add-rx">
-                      <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-pill"></use></svg>
-                      Prescribe
-                    </button>
-                    <button type="button" class="btn btn--secondary" id="btn-add-lab">
-                      <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-flask"></use></svg>
-                      Order Lab
-                    </button>
+                  <div style="display:flex; flex-wrap:wrap; gap:var(--sp-3); justify-content:space-between;">
+                    <div style="display:flex; flex-wrap:wrap; gap:var(--sp-3); flex: 1 1 auto;">
+                      <button type="button" class="btn btn--secondary" id="btn-save-draft" style="flex:1;">Save Draft</button>
+                      <button type="button" class="btn btn--primary" id="btn-complete" style="flex:1;">
+                        <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-lock"></use></svg>
+                        Complete & Lock
+                      </button>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:var(--sp-3); flex: 1 1 auto;">
+                      <button type="button" class="btn btn--secondary" id="btn-add-rx" style="flex:1;">
+                        <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-pill"></use></svg>
+                        Prescribe
+                      </button>
+                      <button type="button" class="btn btn--secondary" id="btn-add-lab" style="flex:1;">
+                        <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-flask"></use></svg>
+                        Order Lab
+                      </button>
+                    </div>
                   </div>
                 </div>
               ` : ''}
@@ -225,9 +228,12 @@
             <div class="card__body" style="padding-top:0;">
               ${rxs.map(rx => `
                 <div style="border-bottom:1px solid var(--border); padding:var(--sp-2) 0;">
-                  <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                     <span class="text-caption">${Format.time(rx.createdAt.split('T')[1].slice(0,5))}</span>
-                    ${Badge.status(rx.status)}
+                    <div style="display:flex; gap: 8px; align-items:center;">
+                      ${Badge.status(rx.status)}
+                      ${!consultData.isCompleted && rx.status === 'PENDING' ? `<button class="btn btn--danger btn--sm btn-cancel-rx" data-id="${rx.id}" style="padding: 2px 6px; font-size: 0.75rem;">Cancel</button>` : ''}
+                    </div>
                   </div>
                   <ul style="padding-left:var(--sp-4); margin:0; font-size:0.875rem;">
                     ${rx.items.map(i => `<li>${escapeHtml(i.name)} - ${escapeHtml(i.dosage)}</li>`).join('')}
@@ -240,24 +246,22 @@
       } else { rxContainer.innerHTML = ''; }
 
       // Existing Labs
-      // Lab API doesn't currently link labOrders to consultationId directly, they are just linked to patient,
-      // but we can filter by notes containing consult ID or just time proximity. 
-      // Actually, our API spec says "linked to the patient's most recent completed consultation". 
-      // For simplicity in this demo, we'll find lab orders created on the same day for this patient by this doctor.
-      const today = consultData.createdAt.split('T')[0];
-      const labs = db.getAll('labOrders').filter(l => l.patientId === patient.id && l.doctorId === currentUser.staffId && l.createdAt.startsWith(today));
+      const labs = db.getAll('labOrders').filter(l => l.consultationId === consultId);
       const labContainer = document.getElementById('existing-lab-section');
       if (labs.length > 0) {
         labContainer.innerHTML = `
           <div class="card">
-            <div class="card__header"><span class="text-card-title">Lab Orders (Today)</span></div>
+            <div class="card__header"><span class="text-card-title">Lab Orders</span></div>
             <div class="card__body" style="padding-top:0;">
               ${labs.map(l => {
                 const test = safeGet('labCatalog', l.testId);
                 return `
-                  <div style="border-bottom:1px solid var(--border); padding:var(--sp-2) 0; display:flex; justify-content:space-between;">
+                  <div style="border-bottom:1px solid var(--border); padding:var(--sp-2) 0; display:flex; justify-content:space-between; align-items:center;">
                     <span class="text-body-sm">${escapeHtml(test ? test.name : 'Unknown')}</span>
-                    ${Badge.status(l.status)}
+                    <div style="display:flex; gap: 8px; align-items:center;">
+                      ${Badge.status(l.status)}
+                      ${!consultData.isCompleted && l.status === 'ORDERED' ? `<button class="btn btn--danger btn--sm btn-cancel-lab" data-id="${l.id}" style="padding: 2px 6px; font-size: 0.75rem;">Cancel</button>` : ''}
+                    </div>
                   </div>
                 `;
               }).join('')}
@@ -265,6 +269,26 @@
           </div>
         `;
       } else { labContainer.innerHTML = ''; }
+      
+      // Bind cancellation events
+      document.querySelectorAll('.btn-cancel-rx').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          try {
+            prescriptions.cancel(e.target.dataset.id);
+            Toast.show('Prescription cancelled.');
+            renderSidebarWidgets();
+          } catch(err) { Toast.show(err.message, 'error'); }
+        });
+      });
+      document.querySelectorAll('.btn-cancel-lab').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          try {
+            laboratory.cancel(e.target.dataset.id);
+            Toast.show('Lab order cancelled.');
+            renderSidebarWidgets();
+          } catch(err) { Toast.show(err.message, 'error'); }
+        });
+      });
     }
 
     function attachEvents() {
@@ -303,13 +327,22 @@
 
     function completeConsultation() {
       const data = getFormData();
-      if (!data.symptoms) {
-        Toast.show('Chief Complaint / Symptoms is required.', 'error');
+      if (!data.diagnosis) {
+        Toast.show('Diagnosis is required to lock the consultation.', 'error');
         return;
       }
+      
+      const hasRx = db.getAll('prescriptions').some(p => p.consultationId === consultId && p.status !== 'CANCELLED');
+      const hasLab = db.getAll('labOrders').some(l => l.consultationId === consultId && l.status !== 'CANCELLED');
+      
+      let message = 'This will lock the record. You will only be able to add addendas afterwards. Proceed?';
+      if (!hasRx && !hasLab) {
+        message = 'Warning: No medicines prescribed or lab tests ordered. ' + message;
+      }
+
       Modal.confirm({
         title: 'Complete Consultation',
-        message: 'This will lock the record. You will only be able to add addendas afterwards. Proceed?',
+        message: message,
         confirmText: 'Complete & Lock',
         onConfirm: () => {
           consultations.saveDraft(consultId, data);
@@ -349,8 +382,13 @@
     // --- Builders ---
 
     function showRxBuilder() {
-      // Very basic builder modal
-      const meds = db.getAll('medicines').filter(m => m.isActive);
+      const allMeds = db.getAll('medicines').filter(m => m.isActive).map(m => {
+        const stock = (m.batches || []).reduce((acc, b) => acc + Math.max(0, b.quantity), 0);
+        let avail = 'In Stock';
+        if (stock === 0) avail = 'Out of Stock';
+        else if (stock <= m.reorderLevel) avail = 'Low Stock';
+        return { ...m, stock, avail };
+      });
       rxItems = [];
 
       const renderRxItems = () => {
@@ -364,6 +402,7 @@
             <div class="rx-item__details">
               <strong>${escapeHtml(item.name)}</strong><br>
               <span class="text-body-sm">${escapeHtml(item.dosage)}, ${escapeHtml(item.frequency)}, for ${escapeHtml(item.duration)} (Qty: ${escapeHtml(item.quantity)})</span>
+              ${item.instructions ? `<br><span class="text-caption text-muted">Inst: ${escapeHtml(item.instructions)}</span>` : ''}
             </div>
             <button class="btn btn--danger btn--sm btn--icon btn-remove-rx" data-index="${i}" type="button" aria-label="Remove medicine">
               <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-x"></use></svg>
@@ -374,11 +413,11 @@
 
       const content = `
         <div style="display:flex;flex-wrap:wrap;gap:var(--sp-4);margin-bottom:var(--sp-4);">
-          <div class="form-group" style="flex:1 1 200px;">
-            <label class="form-group__label">Medicine *</label>
-            <select class="form-input" id="rx-med">
-              <option value="">Select...</option>
-              ${meds.map(m => `<option value="${m.id}">${m.name} (${m.genericName})</option>`).join('')}
+          <div class="form-group" style="flex:1 1 100%;">
+            <label class="form-group__label">Search Medicine *</label>
+            <input type="text" class="form-input" id="rx-med-search" placeholder="Type to filter...">
+            <select class="form-input" id="rx-med" size="4" style="margin-top: 4px; height: 120px;">
+              ${allMeds.map(m => `<option value="${m.id}">${m.name} (${m.genericName}) - ${m.avail} (${m.stock})</option>`).join('')}
             </select>
           </div>
           <div class="form-group" style="flex:1 1 120px;">
@@ -397,6 +436,10 @@
             <label class="form-group__label">Qty *</label>
             <input type="number" class="form-input" id="rx-qty" value="10" min="1">
           </div>
+          <div class="form-group" style="flex:1 1 100%;">
+            <label class="form-group__label">Instructions (Optional)</label>
+            <input type="text" class="form-input" id="rx-inst" placeholder="e.g. After food">
+          </div>
           <div style="display:flex;align-items:flex-end;margin-bottom:12px;flex:1 1 100%;">
             <button class="btn btn--secondary" type="button" id="rx-add-btn" style="width:100%">Add Medicine</button>
           </div>
@@ -412,6 +455,15 @@
 
       const m = Modal.show({ title: 'Prescription Builder', content, size: 'lg', actions });
       renderRxItems();
+      
+      const searchInput = document.getElementById('rx-med-search');
+      const medSelect = document.getElementById('rx-med');
+      searchInput.addEventListener('input', () => {
+        const query = searchInput.value.toLowerCase();
+        Array.from(medSelect.options).forEach(opt => {
+          opt.style.display = opt.text.toLowerCase().includes(query) ? '' : 'none';
+        });
+      });
 
       document.getElementById('rxb-cancel').addEventListener('click', m.close);
       
@@ -429,6 +481,7 @@
         const freq = document.getElementById('rx-freq').value.trim();
         const dur = document.getElementById('rx-dur').value.trim();
         const qty = parseInt(document.getElementById('rx-qty').value);
+        const inst = document.getElementById('rx-inst').value.trim();
 
         if (!medId || !dos || !freq || !dur || !qty || qty <= 0) {
           Toast.show('Please fill all required fields correctly.', 'error');
@@ -440,25 +493,33 @@
           return;
         }
 
-        const med = meds.find(m => m.id === medId);
+        const med = allMeds.find(m => m.id === medId);
+        if (med.stock === 0) {
+          Toast.show('Warning: This medicine is out of stock in the pharmacy.', 'error');
+        }
+
         rxItems.push({
           medicineId: medId,
           name: med.name,
           dosage: dos,
           frequency: freq,
           duration: dur,
-          quantity: qty
+          quantity: qty,
+          instructions: inst || undefined
         });
         document.getElementById('rx-med').value = '';
         document.getElementById('rx-dos').value = '';
         document.getElementById('rx-freq').value = '';
         document.getElementById('rx-dur').value = '';
         document.getElementById('rx-qty').value = '10';
+        document.getElementById('rx-inst').value = '';
         renderRxItems();
       });
 
-      document.getElementById('rxb-submit').addEventListener('click', () => {
+      document.getElementById('rxb-submit').addEventListener('click', (e) => {
         if (rxItems.length === 0) return;
+        const submitBtn = e.target;
+        submitBtn.disabled = true;
         
         try {
           prescriptions.create({
@@ -472,6 +533,7 @@
           m.close();
           renderSidebarWidgets();
         } catch (err) {
+          submitBtn.disabled = false;
           if (err.code === 'ALLERGY_WARNING') {
             Modal.confirm({
               title: 'Allergy Warning',
@@ -502,19 +564,23 @@
       const tests = laboratory.getCatalog();
       const content = `
         <div class="form-group">
-          <label class="form-group__label">Select Test *</label>
-          <select class="form-input" id="lab-test" required>
-            <option value="">Choose a test...</option>
+          <label class="form-group__label">Search Test *</label>
+          <input type="text" class="form-input" id="lab-test-search" placeholder="Type to filter...">
+          <select class="form-input" id="lab-test" size="4" style="margin-top: 4px; height: 100px;" required>
             ${tests.map(t => `<option value="${t.id}">${t.name} (${t.code})</option>`).join('')}
           </select>
         </div>
         <div class="form-group">
-          <label class="form-group__label">Priority</label>
+          <label class="form-group__label">Priority *</label>
           <select class="form-input" id="lab-priority">
             <option value="Routine">Routine</option>
             <option value="Urgent">Urgent</option>
-            <option value="Stat">Stat (Immediate)</option>
+            <option value="Stat">Stat</option>
           </select>
+        </div>
+        <div class="form-group">
+          <label class="form-group__label">Clinical Reason *</label>
+          <input type="text" class="form-input" id="lab-reason" placeholder="Reason for test" required>
         </div>
       `;
       const actions = `
@@ -523,24 +589,45 @@
       `;
 
       const m = Modal.show({ title: 'Order Lab Test', content, size: 'sm', actions });
+      
+      const searchInput = document.getElementById('lab-test-search');
+      const testSelect = document.getElementById('lab-test');
+      searchInput.addEventListener('input', () => {
+        const query = searchInput.value.toLowerCase();
+        Array.from(testSelect.options).forEach(opt => {
+          opt.style.display = opt.text.toLowerCase().includes(query) ? '' : 'none';
+        });
+      });
+
       document.getElementById('labb-cancel').addEventListener('click', m.close);
-      document.getElementById('labb-submit').addEventListener('click', () => {
+      document.getElementById('labb-submit').addEventListener('click', (e) => {
         const testId = document.getElementById('lab-test').value;
         const priority = document.getElementById('lab-priority').value;
-        if (!testId) return;
+        const reason = document.getElementById('lab-reason').value.trim();
+        if (!testId || !reason) {
+          Toast.show('Test selection and Clinical Reason are required.', 'error');
+          return;
+        }
+        
+        const submitBtn = e.target;
+        submitBtn.disabled = true;
         
         try {
           laboratory.orderTest({
+            consultationId: consultId,
             patientId: patient.id,
             doctorId: currentUser.staffId,
             testId,
             priority,
-            notes: `Consultation ${consultId}`
+            notes: reason
           });
           Toast.show('Lab test ordered.');
           m.close();
           renderSidebarWidgets();
-        } catch(err) { Toast.show(err.message, 'error'); }
+        } catch(err) { 
+          submitBtn.disabled = false;
+          Toast.show(err.message, 'error'); 
+        }
       });
     }
   </script>

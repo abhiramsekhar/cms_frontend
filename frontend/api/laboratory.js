@@ -36,6 +36,7 @@ export const laboratory = {
 
       const newOrder = {
         id: db.generateId('lab'),
+        consultationId: data.consultationId || null,
         patientId: data.patientId,
         doctorId: data.doctorId,
         testId: data.testId,
@@ -174,6 +175,37 @@ export const laboratory = {
           link: `pages/doctor/lab-orders.html`,
           createdAt: new Date().toISOString(),
           _v: 1
+        });
+      }
+
+      return tx.getById('labOrders', id);
+    });
+  },
+
+  /**
+   * Cancel an ORDERED lab test.
+   */
+  cancel(id) {
+    return db.transaction(tx => {
+      const order = tx.getById('labOrders', id);
+      if (order.status !== 'ORDERED') {
+        throw new DbError('Only ORDERED lab tests can be cancelled.', 'INVALID_STATE');
+      }
+
+      tx.update('labOrders', id, {
+        status: 'CANCELLED',
+        updatedAt: new Date().toISOString(),
+        _v: order._v
+      });
+
+      // Also cancel the bill
+      const bill = tx.findOne('bills', b => b.status === 'UNPAID' && b.patientId === order.patientId &&
+        b.items.some(i => i.referenceId === order.id));
+      if (bill) {
+        tx.update('bills', bill.id, {
+          status: 'CANCELLED',
+          updatedAt: new Date().toISOString(),
+          _v: bill._v
         });
       }
 
