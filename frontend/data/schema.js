@@ -167,7 +167,7 @@ export const SCHEMAS = {
 
   prescriptions: {
     id:            { required: true,  type: 'string'  },
-    consultationId:{ required: true,  type: 'string'  },
+    consultationId:{ required: false, type: 'string'  },
     patientId:     { required: true,  type: 'string'  },
     doctorId:      { required: true,  type: 'string'  },
     items:         { required: true,  type: 'object'  }, // array of { medicineId, name, dosage, frequency, duration, quantity }
