@@ -148,83 +148,83 @@
       const buildRxHtml = () => `
         <style>
           .rx-doc { font-family: system-ui, -apple-system, sans-serif; color: #1f2937; font-size: 14px; line-height: 1.5; padding: 1rem; }
-          .rx-doc .header { display: flex; justify-content: space-between; border-bottom: 2px solid #05668D; padding-bottom: 20px; margin-bottom: 20px; }
-          .rx-doc .logo { height: 48px; width: auto; margin-bottom: 8px; }
-          .rx-doc .hospital-name { font-size: 18px; font-weight: 600; color: #05668D; }
-          .rx-doc .hospital-info { font-size: 12px; color: #64748b; }
+          .rx-doc .rx-header { display: flex; justify-content: space-between; border-bottom: 2px solid #05668D; padding-bottom: 20px; margin-bottom: 20px; }
+          .rx-doc .rx-logo { height: 48px; width: auto; margin-bottom: 8px; }
+          .rx-doc .rx-hospital-name { font-size: 18px; font-weight: 600; color: #05668D; }
+          .rx-doc .rx-hospital-info { font-size: 12px; color: #64748b; }
           .rx-doc .rx-title { font-size: 24px; font-weight: 700; margin: 0 0 4px 0; color: #05668D; }
-          .rx-doc .info-text { font-size: 12px; color: #475569; }
-          .rx-doc .patient-box { padding: 16px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 20px; }
-          .rx-doc .patient-name { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
-          .rx-doc .patient-details { font-size: 13px; color: #475569; }
-          .rx-doc .allergies { color: #dc2626; font-size: 13px; margin-top: 8px; font-weight: 500; }
-          .rx-doc .notes { padding: 12px; background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; border-radius: 6px; margin-bottom: 20px; font-size: 13px; }
-          .rx-doc table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
-          .rx-doc th { background: #f8fafc; font-weight: 600; text-align: left; padding: 12px; border-bottom: 2px solid #e2e8f0; font-size: 13px; color: #475569; text-transform: uppercase; }
-          .rx-doc td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
-          .rx-doc tr { page-break-inside: avoid; }
-          .rx-doc .signature-area { margin-top: 60px; text-align: right; page-break-inside: avoid; }
-          .rx-doc .signature-line { display: inline-block; width: 200px; border-top: 1px solid #1f2937; padding-top: 8px; font-size: 13px; }
-          .rx-doc .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+          .rx-doc .rx-info-text { font-size: 12px; color: #475569; }
+          .rx-doc .rx-patient-box { padding: 16px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 20px; }
+          .rx-doc .rx-patient-name { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+          .rx-doc .rx-patient-details { font-size: 13px; color: #475569; }
+          .rx-doc .rx-allergies { color: #dc2626; font-size: 13px; margin-top: 8px; font-weight: 500; }
+          .rx-doc .rx-notes { padding: 12px; background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; border-radius: 6px; margin-bottom: 20px; font-size: 13px; }
+          .rx-doc .rx-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+          .rx-doc .rx-th { background: #f8fafc; font-weight: 600; text-align: left; padding: 12px; border-bottom: 2px solid #e2e8f0; font-size: 13px; color: #475569; text-transform: uppercase; }
+          .rx-doc .rx-td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+          .rx-doc .rx-tr { page-break-inside: avoid; }
+          .rx-doc .rx-signature-area { margin-top: 60px; text-align: right; page-break-inside: avoid; }
+          .rx-doc .rx-signature-line { display: inline-block; width: 200px; border-top: 1px solid #1f2937; padding-top: 8px; font-size: 13px; }
+          .rx-doc .rx-footer { margin-top: 40px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; }
           @media print {
             @page { size: A4; margin: 14mm; }
             body { margin: 0; padding: 0; background: white; }
             .rx-doc { padding: 0; }
-            .rx-doc .footer { position: fixed; bottom: 0; left: 0; width: 100%; background: white; }
+            .rx-doc .rx-footer { position: static; bottom: 0; left: 0; width: 100%; background: white; }
           }
         </style>
         <div class="rx-doc" id="print-area">
-          <div class="header">
+          <div class="rx-header">
             <div>
-              <img src="${window.location.origin}${window.location.pathname.substring(0, window.location.pathname.indexOf('/pages/'))}/assets/images/logo.svg" class="logo" alt="Clinova Logo" onload="window.printReady = true;" onerror="window.printReady = true;">
-              <div class="hospital-name">CLINOVA HEALTHCARE</div>
-              <div class="hospital-info">Care. Precision. Trust.</div>
-              <div class="hospital-info">MG Road, Ernakulam, Kerala</div>
+              <img src="${window.location.origin}${window.location.pathname.substring(0, window.location.pathname.indexOf('/pages/'))}/assets/images/logo.svg" class="rx-logo" alt="Clinova Logo" onload="window.printReady = true;" onerror="window.printReady = true;">
+              <div class="rx-hospital-name">CLINOVA HEALTHCARE</div>
+              <div class="rx-hospital-info">Care. Precision. Trust.</div>
+              <div class="rx-hospital-info">MG Road, Ernakulam, Kerala</div>
             </div>
             <div style="text-align: right;">
               <h1 class="rx-title">PRESCRIPTION</h1>
-              <div class="info-text">Prescription ID: ${window.escapeHtml(rx.id)}</div>
-              <div class="info-text">Date: ${Format.date(rx.createdAt)}</div>
-              <div class="info-text">Doctor: ${window.escapeHtml(doc.name)}</div>
+              <div class="rx-info-text">Prescription ID: ${window.escapeHtml(rx.id)}</div>
+              <div class="rx-info-text">Date: ${Format.date(rx.createdAt)}</div>
+              <div class="rx-info-text">Doctor: ${window.escapeHtml(doc.name)}</div>
             </div>
           </div>
 
-          <div class="patient-box">
-            <div class="patient-name">${window.escapeHtml(p.name)}</div>
-            <div class="patient-details">MRN: ${window.escapeHtml(p.mrn)} | ${Format.age(p.dateOfBirth)} yrs | ${window.escapeHtml(p.gender)}</div>
-            ${p.allergies && p.allergies.length ? `<div class="allergies">Allergies: ${window.escapeHtml(p.allergies.join(', '))}</div>` : ''}
+          <div class="rx-patient-box">
+            <div class="rx-patient-name">${window.escapeHtml(p.name)}</div>
+            <div class="rx-patient-details">MRN: ${window.escapeHtml(p.mrn)} | ${Format.age(p.dateOfBirth)} yrs | ${window.escapeHtml(p.gender)}</div>
+            ${p.allergies && p.allergies.length ? `<div class="rx-allergies">Allergies: ${window.escapeHtml(p.allergies.join(', '))}</div>` : ''}
           </div>
 
-          ${rx.notes ? `<div class="notes"><strong>Doctor's Notes:</strong><br>${window.escapeHtml(rx.notes)}</div>` : ''}
+          ${rx.notes ? `<div class="rx-notes"><strong>Doctor's Notes:</strong><br>${window.escapeHtml(rx.notes)}</div>` : ''}
 
-          <table>
+          <table class="rx-table">
             <thead>
-              <tr>
-                <th>Medicine</th>
-                <th>Dosage</th>
-                <th>Frequency</th>
-                <th>Duration</th>
-                <th style="text-align: center;">Qty</th>
+              <tr class="rx-tr">
+                <th class="rx-th">Medicine</th>
+                <th class="rx-th">Dosage</th>
+                <th class="rx-th">Frequency</th>
+                <th class="rx-th">Duration</th>
+                <th class="rx-th" style="text-align: center;">Qty</th>
               </tr>
             </thead>
             <tbody>
               ${items.map(i => `
-                <tr>
-                  <td style="font-weight: 500;">${window.escapeHtml(i.name)}</td>
-                  <td>${window.escapeHtml(i.dosage)}</td>
-                  <td>${window.escapeHtml(i.frequency)}</td>
-                  <td>${window.escapeHtml(i.duration)}</td>
-                  <td style="text-align: center;">${window.escapeHtml(i.quantity)}</td>
+                <tr class="rx-tr">
+                  <td class="rx-td" style="font-weight: 500;">${window.escapeHtml(i.name)}</td>
+                  <td class="rx-td">${window.escapeHtml(i.dosage)}</td>
+                  <td class="rx-td">${window.escapeHtml(i.frequency)}</td>
+                  <td class="rx-td">${window.escapeHtml(i.duration)}</td>
+                  <td class="rx-td" style="text-align: center;">${window.escapeHtml(i.quantity)}</td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
 
-          <div class="signature-area">
-            <div class="signature-line">Doctor's Signature</div>
+          <div class="rx-signature-area">
+            <div class="rx-signature-line">Doctor's Signature</div>
           </div>
 
-          <div class="footer">
+          <div class="rx-footer">
             Clinova Healthcare — Generated ${new Date().toLocaleString()}
           </div>
         </div>
