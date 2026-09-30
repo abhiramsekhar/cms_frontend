@@ -266,14 +266,15 @@ export const pharmacy = {
 
           // Ledger Entry
           tx.insert('stockLedger', {
-            id: db.generateId('stk'),
+            id: db.generateId('sl'),
             medicineId: med.id,
-            type: 'IN',
+            batchNo: newBatch.batchNumber,
+            type: 'PURCHASE',
             quantity: recv.quantity,
-            referenceType: 'PO',
             referenceId: po.id,
-            pharmacistId: pharmacistId,
-            date: new Date().toISOString(),
+            note: 'PO Received',
+            performedBy: pharmacistId,
+            createdAt: new Date().toISOString(),
             _v: 1
           });
 
