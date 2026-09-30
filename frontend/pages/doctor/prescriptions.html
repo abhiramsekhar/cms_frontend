@@ -327,7 +327,6 @@
             <label class="form-group__label">Search Medicine *</label>
             <input type="text" class="form-input" id="rx-med-search" placeholder="Type to filter...">
             <select class="form-input" id="rx-med" size="4" style="margin-top: 4px; height: 120px;">
-              ${allMeds.map(m => `<option value="${m.id}">${window.escapeHtml(m.name)} (${window.escapeHtml(m.genericName)}) - ${m.avail} (${m.stock})</option>`).join('')}
             </select>
           </div>
           <div class="form-group" style="flex:1 1 120px;">
@@ -368,11 +367,22 @@
       
       const searchInput = document.getElementById('rx-med-search');
       const medSelect = document.getElementById('rx-med');
+      
+      const renderMedicineOptions = (query = '') => {
+        const normalizedQuery = query.trim().toLowerCase();
+        const filtered = allMeds.filter(med => 
+          `${med.name} ${med.genericName}`.toLowerCase().includes(normalizedQuery)
+        );
+        medSelect.innerHTML = filtered.map(m => 
+          `<option value="${m.id}">${window.escapeHtml(m.name)} (${window.escapeHtml(m.genericName)}) - ${m.avail} (${m.stock})</option>`
+        ).join('');
+      };
+
+      // Initial render
+      renderMedicineOptions();
+
       searchInput.addEventListener('input', () => {
-        const query = searchInput.value.toLowerCase();
-        Array.from(medSelect.options).forEach(opt => {
-          opt.style.display = opt.text.toLowerCase().includes(query) ? '' : 'none';
-        });
+        renderMedicineOptions(searchInput.value);
       });
 
       document.getElementById('rxb-cancel').addEventListener('click', m.close);
@@ -386,7 +396,7 @@
       });
 
       document.getElementById('rx-add-btn').addEventListener('click', () => {
-        const medId = medSelect.selectedOptions.length > 0 ? medSelect.selectedOptions[0].value : medSelect.value;
+        const medId = medSelect.value;
         const dos = document.getElementById('rx-dos').value.trim();
         const freq = document.getElementById('rx-freq').value.trim();
         const dur = document.getElementById('rx-dur').value.trim();
