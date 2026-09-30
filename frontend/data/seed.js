@@ -205,6 +205,7 @@ export async function seed() {
       symptoms: a.reason, diagnosis: 'Clinical evaluation performed',
       notes: 'Patient counselled. Follow-up advised as needed.',
       vitalSigns: { bp: '120/80', pulse: 72 + (i % 10), temp: 98.4 + (i % 3)*0.2, spo2: 97 + (i % 3) },
+      isCompleted: true,
       createdAt: iso(parseInt(a.date.slice(8,10)) - parseInt(d(0).slice(8,10)), 10), updatedAt: a.updatedAt, _v: 1,
     });
   });

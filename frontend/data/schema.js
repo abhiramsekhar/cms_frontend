@@ -152,6 +152,7 @@ export const SCHEMAS = {
     diagnosis:     { required: false, type: 'string'  },
     notes:         { required: false, type: 'string'  },
     vitalSigns:    { required: false, type: 'object'  },
+    isCompleted:   { required: false, type: 'boolean' },
     createdAt:     { required: true,  type: 'string'  },
     updatedAt:     { required: true,  type: 'string'  },
     _v:            { required: true,  type: 'number'  },
