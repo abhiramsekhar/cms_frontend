@@ -378,9 +378,14 @@
         const filtered = allMeds.filter(med => 
           `${med.name} ${med.genericName}`.toLowerCase().includes(normalizedQuery)
         );
-        medSelect.innerHTML = filtered.map(m => 
-          `<option value="${m.id}">${window.escapeHtml(m.name)} (${window.escapeHtml(m.genericName)}) - ${m.avail} (${m.stock})</option>`
-        ).join('');
+        medSelect.innerHTML = `
+          <option value="">-- Select medicine --</option>
+          ${filtered.map(m => 
+            `<option value="${m.id}">${window.escapeHtml(m.name)} (${window.escapeHtml(m.genericName)}) - ${m.avail} (${m.stock})</option>`
+          ).join('')}
+        `;
+        selectedMedicineId = '';
+        medSelect.value = '';
       };
 
       // Initial render
