@@ -42,7 +42,7 @@
         <div class="page-header">
           <div class="page-header__info">
             <h1 class="text-page-title">Dashboard</h1>
-            <p class="text-caption">Welcome back, ${session.staffName}</p>
+            <p class="text-caption">Welcome back, ${Format.displayName(session.staffName, session.role)}</p>
           </div>
           <div class="page-header__actions">
             <a href="appointments.html" class="btn btn--primary">

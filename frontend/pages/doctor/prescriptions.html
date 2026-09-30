@@ -185,7 +185,7 @@
               <h1 class="rx-title">PRESCRIPTION</h1>
               <div class="rx-info-text">Prescription ID: ${window.escapeHtml(rx.id)}</div>
               <div class="rx-info-text">Date: ${Format.date(rx.createdAt)}</div>
-              <div class="rx-info-text">Doctor: ${window.escapeHtml(doc.name)}</div>
+              <div class="rx-info-text">Doctor: ${window.escapeHtml(Format.displayName(doc.name, 'DOCTOR'))}</div>
             </div>
           </div>
 

@@ -90,7 +90,7 @@
               <div style="margin-bottom:4px;"><strong>Age / Sex:</strong> ${Format.age(patient.dateOfBirth)} yrs / ${patient.gender}</div>
             </div>
             <div>
-              <div style="margin-bottom:4px;"><strong>Referred By:</strong> Dr. ${doctor.name}</div>
+              <div style="margin-bottom:4px;"><strong>Referred By:</strong> ${Format.displayName(doctor.name, 'DOCTOR')}</div>
               <div style="margin-bottom:4px;"><strong>Sample Collected:</strong> ${Format.datetime(order.sampleCollectedAt)}</div>
               <div style="margin-bottom:4px;"><strong>Reported:</strong> ${Format.datetime(order.completedAt)}</div>
             </div>

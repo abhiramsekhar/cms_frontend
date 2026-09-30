@@ -184,7 +184,7 @@
             <div class="timeline-card">
               <div class="timeline-type">
                 <svg class="icon icon--sm" aria-hidden="true"><use href="../../assets/icons/sprite.svg#${icon}"></use></svg>
-                ${escapeHtml(e.type.replace('_', ' '))} • Dr. ${docName}
+                ${escapeHtml(e.type.replace('_', ' '))} • ${Format.displayName(docName, 'DOCTOR')}
               </div>
               <div>${contentHtml}</div>
             </div>

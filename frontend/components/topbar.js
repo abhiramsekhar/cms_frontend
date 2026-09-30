@@ -10,6 +10,7 @@
 
 import { db } from '../data/db.js';
 import { auth } from '../api/auth.js';
+import { Format } from './ui.js';
 
 function icon(id, cls = '') {
   return `<svg class="icon${cls ? ' ' + cls : ''}" aria-hidden="true"><use href="${getBasePath()}assets/icons/sprite.svg#${id}"></use></svg>`;
@@ -111,14 +112,14 @@ export function renderTopbar(container, session) {
         <button class="topbar__user" id="user-menu-btn" aria-expanded="false">
           <div class="avatar avatar--sm" aria-hidden="true">${initials}</div>
           <div class="topbar__user-info">
-            <span class="topbar__user-name">${session.staffName}</span>
+            <span class="topbar__user-name">${Format.displayName(session.staffName, session.role)}</span>
             <span class="topbar__user-role">${roleLabel}</span>
           </div>
           ${icon('icon-chevron-down', 'icon--sm')}
         </button>
         <div class="dropdown__menu" id="user-dropdown">
           <div style="padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--border);">
-            <div style="font-weight: 500; font-size: 0.875rem; color: var(--text);">${session.staffName}</div>
+            <div style="font-weight: 500; font-size: 0.875rem; color: var(--text);">${Format.displayName(session.staffName, session.role)}</div>
             <div style="font-size: 0.75rem; color: var(--muted);">${roleLabel} · ${session.username}</div>
           </div>
           <button class="dropdown__item dropdown__item--danger" id="logout-btn">

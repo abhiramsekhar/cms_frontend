@@ -31,7 +31,7 @@
         <div class="page-header">
           <div class="page-header__info">
             <h1 class="text-page-title">Laboratory Dashboard</h1>
-            <p class="text-caption">Welcome back, ${session.staffName.split(' ')[0]}</p>
+            <p class="text-caption">Welcome back, ${Format.displayName(session.staffName, session.role)}</p>
           </div>
         </div>
         

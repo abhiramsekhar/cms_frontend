@@ -35,6 +35,16 @@ export const Format = {
     const m = today.getMonth() - birthDate.getMonth();
     if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
     return age;
+  },
+  displayName(name, role) {
+    if (!name) return '';
+    const trimmed = name.trim();
+    if (role === 'DOCTOR') {
+      if (!trimmed.toLowerCase().startsWith('dr.')) {
+        return `Dr. ${trimmed}`;
+      }
+    }
+    return trimmed;
   }
 };
 
