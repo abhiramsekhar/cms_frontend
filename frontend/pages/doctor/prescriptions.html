@@ -53,6 +53,12 @@
           <div class="page-header__info">
             <h1 class="text-page-title">My Prescriptions</h1>
           </div>
+          <div class="page-header__actions">
+            <button class="btn btn--primary" id="btn-new-rx">
+              <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-plus"></use></svg>
+              New Prescription
+            </button>
+          </div>
         </div>
 
         <div class="card" style="margin-bottom: var(--sp-6);">
@@ -105,6 +111,9 @@
 
       // Filters
       document.getElementById('filter-status').addEventListener('change', loadRx);
+      
+      // New Prescription
+      document.getElementById('btn-new-rx').addEventListener('click', showNewRxModal);
 
       // Event Delegation
       document.getElementById('rx-table').addEventListener('click', (e) => {
@@ -272,6 +281,202 @@
       `;
 
       Modal.show({ title: 'Prescription Details', content, size: 'lg', actions });
+    }
+
+    function showNewRxModal() {
+      const allMeds = db.getAll('medicines').filter(m => m.isActive).map(m => {
+        const stock = (m.batches || []).reduce((acc, b) => acc + Math.max(0, b.quantity), 0);
+        let avail = 'In Stock';
+        if (stock === 0) avail = 'Out of Stock';
+        else if (stock <= m.reorderLevel) avail = 'Low Stock';
+        return { ...m, stock, avail };
+      });
+      const allPatients = db.getAll('patients');
+      let rxItems = [];
+
+      const renderRxItems = () => {
+        const list = document.getElementById('rx-item-list');
+        if (rxItems.length === 0) {
+          list.innerHTML = '<div class="text-caption">No medicines added yet.</div>';
+          return;
+        }
+        list.innerHTML = rxItems.map((item, i) => `
+          <div class="rx-item" style="display: flex; gap: var(--sp-3); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: var(--sp-3); align-items: center; background: white;">
+            <div class="rx-item__details" style="flex: 1;">
+              <strong>${window.escapeHtml(item.name)}</strong><br>
+              <span class="text-body-sm">${window.escapeHtml(item.dosage)}, ${window.escapeHtml(item.frequency)}, for ${window.escapeHtml(item.duration)} (Qty: ${window.escapeHtml(item.quantity)})</span>
+              ${item.instructions ? `<br><span class="text-caption text-muted">Inst: ${window.escapeHtml(item.instructions)}</span>` : ''}
+            </div>
+            <button class="btn btn--danger btn--sm btn--icon btn-remove-rx" data-index="${i}" type="button" aria-label="Remove medicine">
+              <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-x"></use></svg>
+            </button>
+          </div>
+        `).join('');
+      };
+
+      const content = `
+        <div class="form-group" style="margin-bottom: var(--sp-4);">
+          <label class="form-group__label">Select Patient *</label>
+          <select class="form-input" id="rx-patient" required>
+            <option value="">-- Select a patient --</option>
+            ${allPatients.map(p => `<option value="${p.id}">${window.escapeHtml(p.name)} (${window.escapeHtml(p.mrn)})</option>`).join('')}
+          </select>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--sp-4);margin-bottom:var(--sp-4);">
+          <div class="form-group" style="flex:1 1 100%;">
+            <label class="form-group__label">Search Medicine *</label>
+            <input type="text" class="form-input" id="rx-med-search" placeholder="Type to filter...">
+            <select class="form-input" id="rx-med" size="4" style="margin-top: 4px; height: 120px;">
+              ${allMeds.map(m => `<option value="${m.id}">${window.escapeHtml(m.name)} (${window.escapeHtml(m.genericName)}) - ${m.avail} (${m.stock})</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="flex:1 1 120px;">
+            <label class="form-group__label">Dosage *</label>
+            <input type="text" class="form-input" id="rx-dos" placeholder="e.g. 500mg">
+          </div>
+          <div class="form-group" style="flex:1 1 120px;">
+            <label class="form-group__label">Frequency *</label>
+            <input type="text" class="form-input" id="rx-freq" placeholder="e.g. 1-0-1">
+          </div>
+          <div class="form-group" style="flex:1 1 120px;">
+            <label class="form-group__label">Duration *</label>
+            <input type="text" class="form-input" id="rx-dur" placeholder="e.g. 5 days">
+          </div>
+          <div class="form-group" style="flex:1 1 80px;">
+            <label class="form-group__label">Qty *</label>
+            <input type="number" class="form-input" id="rx-qty" value="10" min="1">
+          </div>
+          <div class="form-group" style="flex:1 1 100%;">
+            <label class="form-group__label">Instructions (Optional)</label>
+            <input type="text" class="form-input" id="rx-inst" placeholder="e.g. After food">
+          </div>
+          <div style="display:flex;align-items:flex-end;margin-bottom:12px;flex:1 1 100%;">
+            <button class="btn btn--secondary" type="button" id="rx-add-btn" style="width:100%">Add Medicine</button>
+          </div>
+        </div>
+        <div class="panel-title" style="font-size: 0.875rem; font-weight: 600; color: var(--muted); text-transform: uppercase; border-bottom: 1px solid var(--border); padding-bottom: var(--sp-1); margin-bottom: var(--sp-3);">Current Prescription</div>
+        <div id="rx-item-list" style="max-height: 200px; overflow-y: auto;"></div>
+      `;
+
+      const actions = `
+        <button class="btn btn--secondary" id="rxb-cancel">Cancel</button>
+        <button class="btn btn--primary" id="rxb-submit">Issue Prescription</button>
+      `;
+
+      const m = Modal.show({ title: 'New Prescription', content, size: 'lg', actions });
+      renderRxItems();
+      
+      const searchInput = document.getElementById('rx-med-search');
+      const medSelect = document.getElementById('rx-med');
+      searchInput.addEventListener('input', () => {
+        const query = searchInput.value.toLowerCase();
+        Array.from(medSelect.options).forEach(opt => {
+          opt.style.display = opt.text.toLowerCase().includes(query) ? '' : 'none';
+        });
+      });
+
+      document.getElementById('rxb-cancel').addEventListener('click', m.close);
+      
+      document.getElementById('rx-item-list').addEventListener('click', (e) => {
+        const removeBtn = e.target.closest('.btn-remove-rx');
+        if (removeBtn) {
+          rxItems.splice(removeBtn.dataset.index, 1);
+          renderRxItems();
+        }
+      });
+
+      document.getElementById('rx-add-btn').addEventListener('click', () => {
+        const medId = medSelect.selectedOptions.length > 0 ? medSelect.selectedOptions[0].value : medSelect.value;
+        const dos = document.getElementById('rx-dos').value.trim();
+        const freq = document.getElementById('rx-freq').value.trim();
+        const dur = document.getElementById('rx-dur').value.trim();
+        const qty = parseInt(document.getElementById('rx-qty').value);
+        const inst = document.getElementById('rx-inst').value.trim();
+
+        if (!medId || !dos || !freq || !dur || !qty || qty <= 0) {
+          Toast.show('Please fill all required fields correctly.', 'error');
+          return;
+        }
+
+        if (rxItems.some(item => item.medicineId === medId)) {
+          Toast.show('Medicine is already added.', 'error');
+          return;
+        }
+
+        const med = allMeds.find(med => med.id === medId);
+        if (med.stock === 0) {
+          Toast.show('Warning: This medicine is out of stock in the pharmacy.', 'error');
+        }
+
+        rxItems.push({
+          medicineId: medId,
+          name: med.name,
+          dosage: dos,
+          frequency: freq,
+          duration: dur,
+          quantity: qty,
+          instructions: inst || undefined
+        });
+        document.getElementById('rx-med').value = '';
+        document.getElementById('rx-dos').value = '';
+        document.getElementById('rx-freq').value = '';
+        document.getElementById('rx-dur').value = '';
+        document.getElementById('rx-qty').value = '10';
+        document.getElementById('rx-inst').value = '';
+        renderRxItems();
+      });
+
+      document.getElementById('rxb-submit').addEventListener('click', (e) => {
+        const patientId = document.getElementById('rx-patient').value;
+        if (!patientId) {
+          Toast.show('Please select a patient.', 'error');
+          return;
+        }
+        if (rxItems.length === 0) {
+          Toast.show('Please add at least one medicine.', 'error');
+          return;
+        }
+        
+        const submitBtn = e.target;
+        submitBtn.disabled = true;
+        
+        try {
+          prescriptions.create({
+            consultationId: null,
+            patientId: patientId,
+            doctorId: currentUser.staffId,
+            items: rxItems,
+            notes: ''
+          }, false);
+          Toast.show('Prescription issued.');
+          m.close();
+          loadRx();
+        } catch (err) {
+          submitBtn.disabled = false;
+          if (err.code === 'ALLERGY_WARNING') {
+            Modal.confirm({
+              title: 'Allergy Warning',
+              message: err.message,
+              confirmText: 'Override & Prescribe',
+              confirmStyle: 'danger',
+              onConfirm: () => {
+                prescriptions.create({
+                  consultationId: null,
+                  patientId: patientId,
+                  doctorId: currentUser.staffId,
+                  items: rxItems,
+                  notes: ''
+                }, true);
+                Toast.show('Prescription issued with override.');
+                m.close();
+                loadRx();
+              }
+            });
+          } else {
+            Toast.show(err.message, 'error');
+          }
+        }
+      });
     }
   </script>
 </body>
