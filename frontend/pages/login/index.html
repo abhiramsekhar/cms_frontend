@@ -14,52 +14,24 @@
   <link rel="stylesheet" href="../../assets/css/forms.css">
   <link rel="stylesheet" href="../../assets/css/responsive.css">
   <style>
-    /* Login-specific styles — minimal, extends the design system */
-    .login-visual__inner {
+    /* Override layout for the image-based design */
+    body {
+      background: #fbfbfb;
+    }
+    .login-layout {
+      width: 100%;
+      min-height: 100vh;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
-      background: var(--navy-900);
-      color: var(--surface);
-      text-align: center;
-      padding: var(--sp-8);
-      position: relative;
-      overflow: hidden;
     }
-    .login-visual__hero {
-      position: absolute;
-      inset: 0;
-      opacity: 0.12;
+    .login-layout__visual {
+      height: 220px;
+      background: url('../../assets/images/clinova-login-page.png') no-repeat left top;
+      background-size: cover;
+      display: block;
     }
-    .login-visual__hero img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    .login-visual__content {
-      position: relative;
-      z-index: 1;
-    }
-    .login-visual__logo {
-      width: 64px;
-      height: 64px;
-      margin-bottom: var(--sp-4);
-    }
-    .login-visual__name {
-      font-size: 1.75rem;
-      font-weight: 600;
-      margin-bottom: var(--sp-2);
-      color: #FFFFFF;
-    }
-    .login-visual__tagline {
-      font-size: 1rem;
-      font-weight: 400;
-      opacity: 0.9;
-      color: #D9ECEB;
-      letter-spacing: 0.04em;
+    .login-visual__inner {
+      display: none !important; /* Hide HTML content, use image */
     }
     .login-form__logo-mobile {
       display: flex;
@@ -69,14 +41,69 @@
     }
     .login-form__logo-mobile img { width: 36px; height: auto; }
     .login-form__logo-mobile span { font-size: 1.25rem; font-weight: 600; color: var(--navy-900); }
-    @media (min-width: 1024px) {
-      .login-form__logo-mobile { display: none; }
-    }
     .login-footer {
       text-align: center;
       margin-top: var(--sp-8);
       font-size: 0.75rem;
       color: var(--muted);
+    }
+    
+    @media (min-width: 1024px) {
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .login-layout {
+        width: 1024px;
+        height: 463px;
+        min-height: auto;
+        background: url('../../assets/images/clinova-login-page.png') no-repeat left top;
+        background-size: 1024px 463px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        border-radius: 12px;
+        position: relative;
+        display: block;
+        margin: auto;
+      }
+      .login-layout__visual {
+        display: none !important;
+      }
+      .login-layout__form {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 440px; 
+        height: 100%;
+        display: block;
+        padding: 0;
+      }
+      .login-form-wrapper {
+        margin: 164px 0 0 50px; 
+        width: 340px;
+        max-width: none;
+      }
+      /* Hide baked-in texts to reveal image */
+      .login-form-wrapper > h1, 
+      .login-form-wrapper > p.text-caption, 
+      .login-footer,
+      .login-form__logo-mobile,
+      .form-group__label {
+        display: none !important;
+      }
+      .form-group {
+        margin-bottom: 22px !important;
+      }
+      .form-banner {
+        position: absolute;
+        top: 90px;
+        left: 50px;
+        width: 340px;
+        z-index: 10;
+      }
+      #session-expired {
+        top: 130px;
+      }
     }
   </style>
 </head>
