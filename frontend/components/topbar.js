@@ -41,16 +41,36 @@ export function renderTopbar(container, session) {
   const roleLabel = ROLE_LABELS[session.role] || session.role;
 
   // Get unread notification count
-  let unreadCount = 0;
-  try {
-    const notifications = db.getAll('notifications');
-    unreadCount = notifications.filter(n => {
-      if (n.isRead) return false;
-      if (n.targetUserId && n.targetUserId !== session.userId) return false;
-      if (n.targetRole && n.targetRole !== session.role) return false;
-      return true;
-    }).length;
-  } catch { /* ignore */ }
+  const updateUnreadCount = () => {
+    let unreadCount = 0;
+    try {
+      const notifications = db.getAll('notifications');
+      unreadCount = notifications.filter(n => {
+        if (n.isRead) return false;
+        if (n.targetUserId && n.targetUserId !== session.userId) return false;
+        if (n.targetRole && n.targetRole !== session.role) return false;
+        return true;
+      }).length;
+    } catch { /* ignore */ }
+    
+    const notifBtn = document.getElementById('notification-btn');
+    if (notifBtn) {
+      let countEl = notifBtn.querySelector('.notification-bell__count');
+      if (unreadCount > 0) {
+        if (!countEl) {
+          countEl = document.createElement('span');
+          countEl.className = 'notification-bell__count';
+          notifBtn.appendChild(countEl);
+        }
+        countEl.textContent = unreadCount > 9 ? '9+' : unreadCount;
+      } else if (countEl) {
+        countEl.remove();
+      }
+    }
+    return unreadCount;
+  };
+  
+  const initialUnread = updateUnreadCount();
 
   container.innerHTML = `
     <div class="topbar__left">
@@ -73,7 +93,6 @@ export function renderTopbar(container, session) {
       <div class="notification-bell dropdown" id="notification-area">
         <button class="btn btn--ghost btn--icon" id="notification-btn" aria-label="Notifications" aria-expanded="false">
           ${icon('icon-bell')}
-          ${unreadCount > 0 ? `<span class="notification-bell__count">${unreadCount > 9 ? '9+' : unreadCount}</span>` : ''}
         </button>
         <div class="notification-dropdown dropdown__menu" id="notification-dropdown">
           <div class="notification-dropdown__header">
@@ -113,9 +132,12 @@ export function renderTopbar(container, session) {
 
   // Populate notification list
   populateNotifications(session);
+  
+  // Set initial count badge
+  updateUnreadCount();
 
   // Event listeners
-  setupTopbarEvents(session);
+  setupTopbarEvents(session, updateUnreadCount);
 }
 
 function populateNotifications(session) {
@@ -163,7 +185,7 @@ function formatRelativeTime(isoString) {
   return `${days}d ago`;
 }
 
-function setupTopbarEvents(session) {
+function setupTopbarEvents(session, updateUnreadCount) {
   const base = getBasePath();
 
   const toggleBtn = document.getElementById('sidebar-toggle');
@@ -252,11 +274,34 @@ function setupTopbarEvents(session) {
           db.update('notifications', n.id, { isRead: true, _v: n._v });
         }
       }
-      // Refresh
-      const countEl = document.querySelector('.notification-bell__count');
-      if (countEl) countEl.remove();
+      updateUnreadCount();
       populateNotifications(session);
     } catch { /* ignore */ }
+  });
+
+  // Handle individual notification clicks
+  document.getElementById('notification-list')?.addEventListener('click', (e) => {
+    const item = e.target.closest('.notification-item');
+    if (!item) return;
+    const id = item.dataset.id;
+    try {
+      const n = db.getById('notifications', id);
+      if (!n.isRead) {
+        db.update('notifications', id, { isRead: true, _v: n._v });
+        updateUnreadCount();
+      }
+      if (n.link) {
+        window.location.href = base + n.link;
+      }
+    } catch { /* ignore */ }
+  });
+  
+  // Listen for background updates
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'clinova.v1.notifications') {
+      updateUnreadCount();
+      populateNotifications(session);
+    }
   });
 
   // User menu dropdown

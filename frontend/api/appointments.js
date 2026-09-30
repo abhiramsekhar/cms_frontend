@@ -185,6 +185,22 @@ function createBooking(tx, data, createdBy, payment, now = new Date()) {
     _v: 1
   });
 
+  const docUser = tx.findOne('users', u => u.staffId === data.doctorId && u.isActive !== false);
+  if (docUser) {
+    tx.insert('notifications', {
+      id: db.generateId('notif'),
+      type: 'APPOINTMENT',
+      targetRole: 'DOCTOR',
+      targetUserId: docUser.id,
+      title: mode === 'WALK_IN' ? 'Walk-in patient' : 'New appointment',
+      message: `${patient.name} has been booked for ${date} at ${time}. Token: ${tokenNumber}`,
+      link: `pages/doctor/appointments.html?date=${date}`,
+      isRead: false,
+      createdAt: nowIso,
+      _v: 1
+    });
+  }
+
   const bill = billing.createBill(tx, {
     id: billId,
     patientId: data.patientId,
@@ -304,6 +320,24 @@ export const appointments = {
         const hasMoney = bill.paidAmount > 0;
         if (!hasMoney || refund) billing.cancelBill(tx, bill.id, cancelledBy);
       }
+      
+      const docUser = tx.findOne('users', u => u.staffId === appt.doctorId && u.isActive !== false);
+      if (docUser) {
+        const patientName = tx.getById('patients', appt.patientId)?.name || 'Patient';
+        tx.insert('notifications', {
+          id: db.generateId('notif'),
+          type: 'APPOINTMENT',
+          targetRole: 'DOCTOR',
+          targetUserId: docUser.id,
+          title: 'Appointment Cancelled',
+          message: `Appointment for ${patientName} on ${appt.date} at ${appt.time} has been cancelled.`,
+          link: `pages/doctor/appointments.html?date=${appt.date}`,
+          isRead: false,
+          createdAt: new Date().toISOString(),
+          _v: 1
+        });
+      }
+
       return updated;
     });
   },

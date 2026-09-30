@@ -25,7 +25,9 @@
 
     initShell(['DOCTOR'], (session) => {
       const page = getPageContent();
-      const stats = reports.getDoctorStats(session.staffId);
+      
+      function renderDashboard() {
+        const stats = reports.getDoctorStats(session.staffId);
 
       page.innerHTML = `
         <div class="page-header">
@@ -129,12 +131,23 @@
         { key: 'actions', label: '', width: '80px', render: r => {
           if (r.status === 'CHECKED_IN' || r.status === 'IN_PROGRESS') {
             return `<a href="appointments.html" class="btn btn--primary btn--sm">Go</a>`;
+          } else if (r.status === 'SCHEDULED') {
+            return `<span style="color:var(--muted); font-size: 0.85em;">Awaiting check-in</span>`;
           }
           return '';
         }}
       ];
 
       new DataTable('today-table', columns, stats.todayApptsList, { defaultSort: 'time' });
+      }
+      
+      renderDashboard();
+      
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'clinova.v1.appointments' || e.key === 'clinova.v1.notifications') {
+          renderDashboard();
+        }
+      });
     });
   </script>
 </body>

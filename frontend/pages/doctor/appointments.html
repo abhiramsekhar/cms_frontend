@@ -30,7 +30,8 @@
     initShell(['DOCTOR'], (session) => {
       currentUser = session;
       const page = getPageContent();
-      const today = new Date().toISOString().split('T')[0];
+      const urlParams = new URLSearchParams(window.location.search);
+      const today = urlParams.get('date') || new Date().toISOString().split('T')[0];
 
       page.innerHTML = `
         <div class="page-header">
@@ -45,7 +46,10 @@
               <span class="search-bar__icon"><svg class="icon icon--sm" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-search"></use></svg></span>
               <input type="text" class="search-bar__input" id="appt-search" placeholder="Search patient...">
             </div>
-            <div class="form-group" style="margin:0;">
+            <div class="form-group" style="margin:0; display:flex; gap: 12px; align-items: center;">
+              <label style="display:flex; align-items:center; gap:4px; font-size:0.9em; cursor:pointer;">
+                <input type="checkbox" id="filter-upcoming"> Upcoming (7 days)
+              </label>
               <input type="date" class="form-input" id="filter-date" value="${today}">
             </div>
           </div>
@@ -63,7 +67,14 @@
 
       // Setup Table
       const columns = [
-        { key: 'tokenNumber', label: 'Token', width:'80px', sortable: true, render: r => `<strong>#${escapeHtml(r.tokenNumber)}</strong>` },
+        { key: 'tokenNumber', label: 'Token', width:'100px', sortable: true, render: r => {
+          const unread = db.getAll('notifications').filter(n => n.targetUserId === currentUser.userId && !n.isRead && n.type === 'APPOINTMENT');
+          const isNew = unread.some(n => n.link.includes(`date=${r.date}`) && (n.message.includes(`Token: ${r.tokenNumber}`) || n.title === 'Appointment Cancelled'));
+          let html = `<strong>#${escapeHtml(r.tokenNumber)}</strong>`;
+          if (isNew) html += ` <span class="badge badge--success badge--sm" style="margin-left:4px; font-size:10px;">New</span>`;
+          return html;
+        }},
+        { key: 'date', label: 'Date', width:'100px', sortable: true, render: r => escapeHtml(Format.date(r.date)) },
         { key: 'time', label: 'Time', width:'100px', sortable: true, render: r => escapeHtml(Format.time(r.time)) },
         { key: 'patientId', label: 'Patient', sortable: true, render: r => {
           const p = safeGet('patients', r.patientId);
@@ -71,9 +82,11 @@
         }},
         { key: 'type', label: 'Type', sortable: true, render: r => escapeHtml(r.type) },
         { key: 'status', label: 'Status', sortable: true, render: r => Badge.status(r.status) },
-        { key: 'actions', label: '', width: '120px', render: r => {
+        { key: 'actions', label: '', width: '150px', render: r => {
           if (r.status === 'CHECKED_IN' || r.status === 'IN_PROGRESS') {
             return `<button class="btn btn--primary btn--sm btn-consult" data-id="${r.id}">Consult</button>`;
+          } else if (r.status === 'SCHEDULED') {
+            return `<span style="color:var(--muted); font-size: 0.85em;">Awaiting check-in</span>`;
           } else if (r.status === 'COMPLETED') {
             const consult = db.getAll('consultations').find(c => c.appointmentId === r.id);
             if (consult) {
@@ -89,6 +102,10 @@
 
       // Filters
       document.getElementById('filter-date').addEventListener('change', loadAppointments);
+      document.getElementById('filter-upcoming').addEventListener('change', (e) => {
+        document.getElementById('filter-date').disabled = e.target.checked;
+        loadAppointments();
+      });
 
       // Event Delegation
       document.getElementById('appts-table').addEventListener('click', async (e) => {
@@ -108,10 +125,26 @@
     });
 
     function loadAppointments() {
-      const date = document.getElementById('filter-date').value;
-      const data = appointments.list({ date, doctorId: currentUser.staffId });
+      const isUpcoming = document.getElementById('filter-upcoming').checked;
+      const dateEl = document.getElementById('filter-date');
+      let data = [];
+      if (isUpcoming) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+        data = appointments.list({ doctorId: currentUser.staffId })
+                           .filter(a => a.date >= todayStr && a.date <= nextWeek);
+      } else {
+        data = appointments.list({ date: dateEl.value, doctorId: currentUser.staffId });
+      }
       apptTable.updateData(data);
     }
+    
+    // Auto-refresh when another tab books an appointment or reads notifications
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'clinova.v1.appointments' || e.key === 'clinova.v1.notifications') {
+        loadAppointments();
+      }
+    });
   </script>
 </body>
 </html>
