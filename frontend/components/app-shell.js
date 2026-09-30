@@ -18,6 +18,11 @@ import { renderTopbar } from './topbar.js';
  */
 export function initShell(allowedRoles, onReady) {
   const session = guard(allowedRoles);
+  document.body.classList.add('role-' + session.role.toLowerCase());
+  
+  if (session.role === 'DOCTOR' && localStorage.getItem('clinova.doctor.sidebarCollapsed') === 'true') {
+    document.body.classList.add('is-sidebar-collapsed');
+  }
 
   // Build shell structure
   const appEl = document.getElementById('app');
@@ -40,6 +45,12 @@ export function initShell(allowedRoles, onReady) {
   // Render components
   renderSidebar(document.getElementById('sidebar'), session.role);
   renderTopbar(document.getElementById('topbar'), session);
+  
+  if (session.role === 'DOCTOR' && document.body.classList.contains('is-sidebar-collapsed')) {
+      document.querySelectorAll('.sidebar .nav-item').forEach(item => {
+          item.setAttribute('title', item.querySelector('span')?.textContent || '');
+      });
+  }
 
   // Call ready callback
   if (onReady) {

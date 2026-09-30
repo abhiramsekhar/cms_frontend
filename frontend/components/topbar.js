@@ -59,8 +59,14 @@ export function renderTopbar(container, session) {
       </button>
       <div class="search-bar" id="global-search">
         <span class="search-bar__icon">${icon('icon-search', 'icon--sm')}</span>
-        <input type="text" class="search-bar__input" placeholder="Search patients, appointments…" aria-label="Search" id="search-input">
+        <input type="text" class="search-bar__input" placeholder="Search patients, appointments…" aria-label="Search" id="search-input" autocomplete="off">
+        <button id="search-clear" class="btn btn--ghost btn--icon" style="display:none; position: absolute; right: 40px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; min-height: 24px;" aria-label="Clear search">
+          ${icon('icon-x', 'icon--sm')}
+        </button>
         <kbd class="search-bar__kbd">⌘K</kbd>
+        <div class="dropdown__menu" id="search-dropdown" style="width: 100%; top: calc(100% + 4px); max-height: 400px; overflow-y: auto;">
+          <div id="search-results"></div>
+        </div>
       </div>
     </div>
     <div class="topbar__right">
@@ -160,12 +166,71 @@ function formatRelativeTime(isoString) {
 function setupTopbarEvents(session) {
   const base = getBasePath();
 
-  // Sidebar toggle
-  document.getElementById('sidebar-toggle')?.addEventListener('click', () => {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebar-overlay');
-    sidebar?.classList.toggle('is-open');
-    overlay?.classList.toggle('is-visible');
+  const toggleBtn = document.getElementById('sidebar-toggle');
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+
+  const closeMobileSidebar = () => {
+    if (!sidebar?.classList.contains('is-open')) return;
+    sidebar.classList.remove('is-open');
+    overlay?.classList.remove('is-visible');
+    document.body.style.overflow = '';
+    toggleBtn?.setAttribute('aria-expanded', 'false');
+    toggleBtn?.focus();
+  };
+
+  const openMobileSidebar = () => {
+    sidebar?.classList.add('is-open');
+    overlay?.classList.add('is-visible');
+    document.body.style.overflow = 'hidden';
+    toggleBtn?.setAttribute('aria-expanded', 'true');
+  };
+
+  toggleBtn?.addEventListener('click', () => {
+    if (window.innerWidth >= 1024 && session.role === 'DOCTOR') {
+      document.body.classList.toggle('is-sidebar-collapsed');
+      const isCollapsed = document.body.classList.contains('is-sidebar-collapsed');
+      localStorage.setItem('clinova.doctor.sidebarCollapsed', isCollapsed ? 'true' : 'false');
+      toggleBtn.setAttribute('aria-expanded', !isCollapsed);
+      
+      // Toggle tooltips on nav items
+      document.querySelectorAll('.sidebar .nav-item').forEach(item => {
+        if (isCollapsed) {
+          item.setAttribute('title', item.querySelector('span')?.textContent || '');
+        } else {
+          item.removeAttribute('title');
+        }
+      });
+    } else {
+      if (sidebar?.classList.contains('is-open')) {
+        closeMobileSidebar();
+      } else {
+        openMobileSidebar();
+      }
+    }
+  });
+
+  // Close on ESC
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && window.innerWidth < 1024) {
+      closeMobileSidebar();
+    }
+  });
+
+  // Close on nav link click
+  document.querySelectorAll('.sidebar .nav-item').forEach(link => {
+    link.addEventListener('click', () => {
+      if (window.innerWidth < 1024) closeMobileSidebar();
+    });
+  });
+
+  // Clean up stale state on resize
+  window.addEventListener('resize', () => {
+    if (window.innerWidth >= 1024 && sidebar?.classList.contains('is-open')) {
+      sidebar.classList.remove('is-open');
+      overlay?.classList.remove('is-visible');
+      document.body.style.overflow = '';
+    }
   });
 
   // Notification dropdown
@@ -218,7 +283,207 @@ function setupTopbarEvents(session) {
 
   // Close sidebar overlay
   document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
-    document.getElementById('sidebar')?.classList.remove('is-open');
-    document.getElementById('sidebar-overlay')?.classList.remove('is-visible');
+    if (window.innerWidth < 1024) closeMobileSidebar();
+  });
+
+  if (session.role === 'DOCTOR') {
+    setupDoctorSearch(session);
+  }
+}
+
+function setupDoctorSearch(session) {
+  const searchInput = document.getElementById('search-input');
+  const searchClear = document.getElementById('search-clear');
+  const searchDropdown = document.getElementById('search-dropdown');
+  const searchResults = document.getElementById('search-results');
+  if (!searchInput || !searchDropdown || !searchResults) return;
+
+  const base = getBasePath();
+  let selectedIndex = -1;
+  let items = [];
+
+  const closeSearch = () => {
+    searchDropdown.classList.remove('is-open');
+    selectedIndex = -1;
+  };
+
+  let searchTimeout;
+
+  const performSearch = () => {
+    const query = searchInput.value.toLowerCase().trim();
+    if (query.length < 2) {
+      closeSearch();
+      searchClear.style.display = query.length > 0 ? 'block' : 'none';
+      return;
+    }
+    searchClear.style.display = 'block';
+
+    const escapeHtml = (str) => {
+      if (str == null) return '';
+      return String(str).replace(/[&<>"']/g, match => {
+        const escapeMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+        return escapeMap[match];
+      });
+    };
+
+    const allPatients = db.getAll('patients') || [];
+    const labCatalog = db.getAll('labCatalog') || [];
+    const getPat = (id) => allPatients.find(p => p.id === id) || { name: 'Unknown patient', mrn: '-' };
+    const getTest = (id) => labCatalog.find(t => t.id === id) || { name: 'Unknown test' };
+
+    const patients = allPatients.filter(p => 
+      (p.name?.toLowerCase() ?? '').includes(query) || 
+      (p.mrn?.toLowerCase() ?? '').includes(query) || 
+      (p.phone?.toLowerCase() ?? '').includes(query)
+    ).slice(0, 5);
+
+    const appointments = (db.getAll('appointments') || []).filter(a => {
+      if (a.doctorId !== session.staffId) return false;
+      const pat = getPat(a.patientId);
+      return (pat.name?.toLowerCase() ?? '').includes(query) || 
+             (pat.mrn?.toLowerCase() ?? '').includes(query) || 
+             (a.type?.toLowerCase() ?? '').includes(query) || 
+             (a.status?.toLowerCase() ?? '').includes(query) || 
+             (a.date ?? '').includes(query);
+    }).slice(0, 5);
+
+    const prescriptions = (db.getAll('prescriptions') || []).filter(p => {
+      if (p.doctorId !== session.staffId) return false;
+      const pat = getPat(p.patientId);
+      const items = Array.isArray(p.items) ? p.items : [];
+      return (pat.name?.toLowerCase() ?? '').includes(query) || 
+             (p.status?.toLowerCase() ?? '').includes(query) || 
+             items.some(m => (m.name?.toLowerCase() ?? '').includes(query));
+    }).slice(0, 5);
+
+    const labOrders = (db.getAll('labOrders') || []).filter(l => {
+      if (l.doctorId !== session.staffId) return false;
+      const pat = getPat(l.patientId);
+      const test = getTest(l.testId);
+      return (pat.name?.toLowerCase() ?? '').includes(query) || 
+             (test.name?.toLowerCase() ?? '').includes(query) || 
+             (l.status?.toLowerCase() ?? '').includes(query) || 
+             (l.priority?.toLowerCase() ?? '').includes(query);
+    }).slice(0, 5);
+
+    let html = '';
+    items = [];
+
+    if (patients.length) {
+      html += `<div class="dropdown__divider" style="margin:0;"></div><div style="padding: 4px 16px; font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">Patients</div>`;
+      patients.forEach(p => {
+        items.push({ url: base + 'pages/shared/patient-profile.html?id=' + p.id });
+        html += `<a href="${items[items.length-1].url}" class="dropdown__item" style="display:flex; flex-direction:column; gap:2px; padding: 8px 16px;">
+          <div style="font-weight:500;">${escapeHtml(p.name)}</div>
+          <div style="font-size:0.75rem; color:var(--muted);">MRN: ${escapeHtml(p.mrn)}</div>
+        </a>`;
+      });
+    }
+
+    if (appointments.length) {
+      html += `<div class="dropdown__divider" style="margin:0;"></div><div style="padding: 4px 16px; font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">Appointments</div>`;
+      appointments.forEach(a => {
+        items.push({ url: base + 'pages/doctor/appointments.html' });
+        const pat = getPat(a.patientId);
+        html += `<a href="${items[items.length-1].url}" class="dropdown__item" style="display:flex; flex-direction:column; gap:2px; padding: 8px 16px;">
+          <div style="font-weight:500;">${escapeHtml(a.date)} · ${escapeHtml(a.time)}</div>
+          <div style="font-size:0.75rem; color:var(--muted);">${escapeHtml(pat.name)} · ${escapeHtml(a.status)}</div>
+        </a>`;
+      });
+    }
+
+    if (prescriptions.length) {
+      html += `<div class="dropdown__divider" style="margin:0;"></div><div style="padding: 4px 16px; font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">Prescriptions</div>`;
+      prescriptions.forEach(p => {
+        items.push({ url: base + 'pages/doctor/prescriptions.html' });
+        const pat = getPat(p.patientId);
+        const medItems = Array.isArray(p.items) ? p.items : [];
+        const meds = medItems.map(m => m.name).join(', ');
+        html += `<a href="${items[items.length-1].url}" class="dropdown__item" style="display:flex; flex-direction:column; gap:2px; padding: 8px 16px;">
+          <div style="font-weight:500;">${escapeHtml(pat.name)}</div>
+          <div style="font-size:0.75rem; color:var(--muted);">${escapeHtml(meds)} · ${escapeHtml(p.status)}</div>
+        </a>`;
+      });
+    }
+
+    if (labOrders.length) {
+      html += `<div class="dropdown__divider" style="margin:0;"></div><div style="padding: 4px 16px; font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">Lab Orders</div>`;
+      labOrders.forEach(l => {
+        items.push({ url: base + 'pages/doctor/lab-orders.html' });
+        const pat = getPat(l.patientId);
+        const test = getTest(l.testId);
+        html += `<a href="${items[items.length-1].url}" class="dropdown__item" style="display:flex; flex-direction:column; gap:2px; padding: 8px 16px;">
+          <div style="font-weight:500;">${escapeHtml(pat.name)}</div>
+          <div style="font-size:0.75rem; color:var(--muted);">${escapeHtml(test.name)} · ${escapeHtml(l.priority)} · ${escapeHtml(l.status)}</div>
+        </a>`;
+      });
+    }
+
+    if (items.length === 0) {
+      html = `<div style="padding: 16px; text-align: center; color: var(--muted); font-size: 0.875rem;">No matching records found</div>`;
+    }
+
+    searchResults.innerHTML = html;
+    searchDropdown.classList.add('is-open');
+    selectedIndex = -1;
+  };
+
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(performSearch, 150);
+  });
+  
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeSearch();
+      searchInput.blur();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (items.length > 0) {
+        selectedIndex = (selectedIndex + 1) % items.length;
+        updateHighlight();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (items.length > 0) {
+        selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+        updateHighlight();
+      }
+    } else if (e.key === 'Enter') {
+      if (selectedIndex >= 0 && selectedIndex < items.length) {
+        window.location.href = items[selectedIndex].url;
+      }
+    }
+  });
+
+  searchClear.addEventListener('click', () => {
+    searchInput.value = '';
+    searchClear.style.display = 'none';
+    closeSearch();
+    searchInput.focus();
+  });
+
+  const updateHighlight = () => {
+    const nodes = searchResults.querySelectorAll('a.dropdown__item');
+    nodes.forEach((node, i) => {
+      if (i === selectedIndex) {
+        node.style.background = 'var(--hover-bg)';
+      } else {
+        node.style.background = 'transparent';
+      }
+    });
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      searchInput.focus();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) {
+      closeSearch();
+    }
   });
 }

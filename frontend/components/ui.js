@@ -371,9 +371,14 @@ export class DataTable {
     for (const row of paginated) {
       html += `<tr>`;
       for (const col of this.columns) {
-        const val = col.render ? col.render(row) : row[col.key];
-        // responsive data-label for stacked cards
-        html += `<td data-label="${col.label}">${val == null ? '-' : val}</td>`;
+        try {
+          const val = col.render ? col.render(row) : row[col.key];
+          // responsive data-label for stacked cards
+          html += `<td data-label="${col.label}">${val == null ? '-' : val}</td>`;
+        } catch (err) {
+          console.warn(`Error rendering cell for row id ${row.id}`, err);
+          html += `<td data-label="${col.label}">—</td>`;
+        }
       }
       html += `</tr>`;
     }

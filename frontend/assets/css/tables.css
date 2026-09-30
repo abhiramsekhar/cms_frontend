@@ -124,6 +124,14 @@
     justify-content: flex-end;
 }
 
+.table-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: nowrap;
+}
+
 /* ── Table Toolbar ── */
 .table-toolbar {
     display: flex;

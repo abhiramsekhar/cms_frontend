@@ -53,15 +53,23 @@
         </div>
       `;
 
+      const safeGet = (coll, id) => {
+        try { return db.getById(coll, id); } catch { return null; }
+      };
+      const escapeHtml = (str) => {
+        if (str == null) return '';
+        return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+      };
+
       // Setup Table
       const columns = [
-        { key: 'tokenNumber', label: 'Token', width:'80px', sortable: true, render: r => `<strong>#${r.tokenNumber}</strong>` },
-        { key: 'time', label: 'Time', width:'100px', sortable: true, render: r => Format.time(r.time) },
+        { key: 'tokenNumber', label: 'Token', width:'80px', sortable: true, render: r => `<strong>#${escapeHtml(r.tokenNumber)}</strong>` },
+        { key: 'time', label: 'Time', width:'100px', sortable: true, render: r => escapeHtml(Format.time(r.time)) },
         { key: 'patientId', label: 'Patient', sortable: true, render: r => {
-          const p = db.getById('patients', r.patientId);
-          return `<strong>${p.name}</strong><br><span class="text-caption">${p.mrn}</span>`;
+          const p = safeGet('patients', r.patientId);
+          return p ? `<strong>${escapeHtml(p.name)}</strong><br><span class="text-caption">${escapeHtml(p.mrn)}</span>` : `<span style="color:var(--muted)">Patient unavailable</span>`;
         }},
-        { key: 'type', label: 'Type', sortable: true, render: r => r.type },
+        { key: 'type', label: 'Type', sortable: true, render: r => escapeHtml(r.type) },
         { key: 'status', label: 'Status', sortable: true, render: r => Badge.status(r.status) },
         { key: 'actions', label: '', width: '120px', render: r => {
           if (r.status === 'CHECKED_IN' || r.status === 'IN_PROGRESS') {

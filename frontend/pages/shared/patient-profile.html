@@ -326,11 +326,16 @@
         e.preventDefault();
         const testId = document.getElementById('lab-test').value;
         const priority = document.getElementById('lab-priority').value;
-        const notes = document.getElementById('lab-notes').value;
+        let notes = document.getElementById('lab-notes').value;
 
         if (!testId) return;
 
         try {
+          const recentConsult = db.getAll('consultations').filter(c => c.patientId === patientId && c.isCompleted).sort((a,b) => b.createdAt.localeCompare(a.createdAt))[0];
+          if (recentConsult) {
+            notes = `Consultation ${recentConsult.id}${notes ? '\n' + notes : ''}`;
+          }
+
           laboratory.orderTest({
             patientId: patientId,
             doctorId: currentUser.staffId,

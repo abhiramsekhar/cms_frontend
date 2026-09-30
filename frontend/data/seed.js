@@ -459,13 +459,17 @@ export async function seed() {
   db.replaceAll('notifications',  notifications);
   db.replaceAll('auditLog',       []);
   db.replaceAll('settings',       settings);
+  localStorage.setItem('clinova.v1.seedVersion', '1.1');
 }
 
 /**
- * Check if seed data exists.
+ * Check if seed data exists and matches the current version.
  */
 export function isSeeded() {
   try {
+    const version = localStorage.getItem('clinova.v1.seedVersion');
+    if (version !== '1.1') return false;
+    
     const users = JSON.parse(localStorage.getItem('clinova.v1.users') || '[]');
     return users.length > 0;
   } catch { return false; }
