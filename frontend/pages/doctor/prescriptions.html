@@ -368,6 +368,11 @@
       const searchInput = document.getElementById('rx-med-search');
       const medSelect = document.getElementById('rx-med');
       
+      let selectedMedicineId = '';
+      medSelect.addEventListener('change', () => {
+        selectedMedicineId = medSelect.value;
+      });
+      
       const renderMedicineOptions = (query = '') => {
         const normalizedQuery = query.trim().toLowerCase();
         const filtered = allMeds.filter(med => 
@@ -382,6 +387,7 @@
       renderMedicineOptions();
 
       searchInput.addEventListener('input', () => {
+        selectedMedicineId = '';
         renderMedicineOptions(searchInput.value);
       });
 
@@ -396,7 +402,7 @@
       });
 
       document.getElementById('rx-add-btn').addEventListener('click', () => {
-        const medId = medSelect.value;
+        const medId = selectedMedicineId;
         const dos = document.getElementById('rx-dos').value.trim();
         const freq = document.getElementById('rx-freq').value.trim();
         const dur = document.getElementById('rx-dur').value.trim();
@@ -428,6 +434,7 @@
           instructions: inst || undefined
         });
         document.getElementById('rx-med').value = '';
+        selectedMedicineId = '';
         document.getElementById('rx-dos').value = '';
         document.getElementById('rx-freq').value = '';
         document.getElementById('rx-dur').value = '';
