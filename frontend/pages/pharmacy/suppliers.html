@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="../../assets/css/tables.css">
   <link rel="stylesheet" href="../../assets/css/utilities.css">
   <link rel="stylesheet" href="../../assets/css/responsive.css">
+  <link rel="stylesheet" href="./pharmacy.css">
 </head>
 <body>
   <div class="app" id="app"></div>
@@ -21,8 +22,51 @@
     import { initShell, getPageContent } from '../../components/app-shell.js';
     import { DataTable, Modal, Toast } from '../../components/ui.js';
     import { pharmacy } from '../../api/pharmacy.js';
+    import { db } from '../../data/db.js';
 
     let supTable;
+
+    /* ── Inline validation helpers ── */
+    function setFieldError(name, msg) {
+      const group = document.querySelector(`[name="${name}"]`)?.closest('.form-group');
+      if (!group) return;
+      group.classList.toggle('has-error', !!msg);
+      group.classList.toggle('has-success', !msg);
+      const err = group.querySelector('.field-error');
+      if (err) err.textContent = msg || '';
+    }
+    function clearFieldErrors(form) {
+      form.querySelectorAll('.form-group').forEach(g => {
+        g.classList.remove('has-error', 'has-success');
+      });
+    }
+    function validateSupplierForm(f) {
+      let ok = true;
+      const name = f.supName.value.trim();
+      const cp = f.contactPerson.value.trim();
+      const phone = f.phone.value.trim();
+      const email = f.email.value.trim();
+
+      if (!name) { setFieldError('supName', 'Supplier name is required'); ok = false; }
+      else setFieldError('supName', '');
+
+      if (!cp) { setFieldError('contactPerson', 'Contact person is required'); ok = false; }
+      else setFieldError('contactPerson', '');
+
+      if (!phone) { setFieldError('phone', 'Phone number is required'); ok = false; }
+      else if (!/^\+?[\d\s\-]{7,15}$/.test(phone)) { setFieldError('phone', 'Enter a valid phone number'); ok = false; }
+      else setFieldError('phone', '');
+
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setFieldError('email', 'Enter a valid email address'); ok = false;
+      } else setFieldError('email', '');
+
+      if (!ok) {
+        const first = f.querySelector('.form-group.has-error input, .form-group.has-error select');
+        if (first) first.focus();
+      }
+      return ok;
+    }
 
     initShell(['PHARMACIST', 'ADMIN'], () => {
       const page = getPageContent();
@@ -50,20 +94,19 @@
         </div>
       `;
 
+      /* Columns: removed "Medicines Supplied" column (Task 1) */
       const columns = [
-        { key: 'name', label: 'Supplier Name', sortable: true, render: r => `<strong>${r.name}</strong>` },
-        { key: 'contactPerson', label: 'Contact Person', sortable: true },
-        { key: 'phone', label: 'Phone', sortable: false },
-        { key: 'email', label: 'Email', sortable: false },
-        { key: 'typicalMedicines', label: 'Medicines Supplied', sortable: false, render: r => {
-          if (!r.typicalMedicines || !r.typicalMedicines.length) return '-';
-          return `<div style="display:flex; flex-wrap:wrap; gap:4px;">${r.typicalMedicines.map(mId => {
-            try { return `<span class="badge badge--neutral">${db.getById('medicines', mId).name}</span>`; }
-            catch(e){ return ''; }
-          }).join('')}</div>`;
-        } },
-        { key: 'actions', label: '', width: '80px', render: r => `
-          <button class="btn btn--secondary btn--sm btn-edit" data-id="${r.id}">Edit</button>
+        { key: 'name',          label: 'Supplier Name',   sortable: true,  render: r => `<strong>${r.name}</strong>` },
+        { key: 'contactPerson', label: 'Contact Person',  sortable: true  },
+        { key: 'phone',         label: 'Phone',           sortable: false },
+        { key: 'email',         label: 'Email',           sortable: false },
+        { key: 'rates',         label: 'Rates',           sortable: false, render: r => {
+          const cnt = (r.rates || []).length;
+          return cnt ? `<span class="badge badge--neutral">${cnt} medicine${cnt > 1 ? 's' : ''}</span>` : '<span class="text-caption">None</span>';
+        }},
+        { key: 'actions', label: '', width: '180px', render: r => `
+          <button class="btn btn--secondary btn--sm btn-edit" data-id="${r.id}" style="margin-right:4px;">Edit</button>
+          <button class="btn btn--secondary btn--sm btn-rates" data-id="${r.id}">Rates</button>
         `}
       ];
 
@@ -72,70 +115,215 @@
       supTable.render();
 
       document.getElementById('btn-add-sup').addEventListener('click', () => showForm());
-      
-      document.getElementById('sup-table').addEventListener('click', (e) => {
+
+      document.getElementById('sup-table').addEventListener('click', e => {
         const editBtn = e.target.closest('.btn-edit');
         if (editBtn) {
           const sup = pharmacy.listSuppliers().find(s => s.id === editBtn.dataset.id);
           showForm(sup);
+          return;
+        }
+        const ratesBtn = e.target.closest('.btn-rates');
+        if (ratesBtn) {
+          const sup = pharmacy.listSuppliers().find(s => s.id === ratesBtn.dataset.id);
+          showRates(sup);
         }
       });
     });
 
+    /* ── Add / Edit Supplier Form ── */
     function showForm(sup = null) {
       const content = `
-        <form id="sup-form" style="display:flex;flex-direction:column;gap:var(--sp-4);">
+        <form id="sup-form" novalidate style="display:flex;flex-direction:column;gap:var(--sp-4);">
           <div class="form-group">
             <label class="form-group__label">Supplier Name *</label>
-            <input type="text" class="form-input" name="name" value="${sup ? sup.name : ''}" required>
+            <input type="text" class="form-input" name="supName" value="${sup ? sup.name : ''}" autocomplete="off">
+            <div class="field-error" aria-live="polite"></div>
           </div>
           <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
             <div class="form-group">
               <label class="form-group__label">Contact Person *</label>
-              <input type="text" class="form-input" name="contactPerson" value="${sup ? sup.contactPerson : ''}" required>
+              <input type="text" class="form-input" name="contactPerson" value="${sup ? sup.contactPerson : ''}" autocomplete="off">
+              <div class="field-error" aria-live="polite"></div>
             </div>
             <div class="form-group">
               <label class="form-group__label">Phone *</label>
-              <input type="tel" class="form-input" name="phone" value="${sup ? sup.phone : ''}" required>
+              <input type="tel" class="form-input" name="phone" value="${sup ? sup.phone : ''}" placeholder="+91-XXXXXXXXXX">
+              <div class="field-error" aria-live="polite"></div>
             </div>
           </div>
           <div class="form-group">
             <label class="form-group__label">Email</label>
             <input type="email" class="form-input" name="email" value="${sup ? (sup.email || '') : ''}">
-          </div>
-          <div class="form-group">
-            <label class="form-group__label">Medicines Supplied (comma-separated IDs)</label>
-            <textarea class="form-input" name="typicalMedicines" rows="3">${sup && sup.typicalMedicines ? sup.typicalMedicines.join(', ') : ''}</textarea>
+            <div class="field-error" aria-live="polite"></div>
           </div>
         </form>
       `;
 
       const actions = `
         <button class="btn btn--secondary" id="sup-cancel">Cancel</button>
-        <button class="btn btn--primary" id="sup-submit" form="sup-form">Save Supplier</button>
+        <button class="btn btn--primary" id="sup-submit">${sup ? 'Save Changes' : 'Add Supplier'}</button>
       `;
 
       const m = Modal.show({ title: sup ? 'Edit Supplier' : 'Add Supplier', content, size: 'md', actions });
+      const f = document.getElementById('sup-form');
+
+      /* Blur validation */
+      f.querySelectorAll('input').forEach(inp => {
+        inp.addEventListener('blur', () => {
+          if (inp.name === 'supName') {
+            setFieldError('supName', inp.value.trim() ? '' : 'Supplier name is required');
+          } else if (inp.name === 'contactPerson') {
+            setFieldError('contactPerson', inp.value.trim() ? '' : 'Contact person is required');
+          } else if (inp.name === 'phone') {
+            const v = inp.value.trim();
+            if (!v) setFieldError('phone', 'Phone number is required');
+            else if (!/^\+?[\d\s\-]{7,15}$/.test(v)) setFieldError('phone', 'Enter a valid phone number');
+            else setFieldError('phone', '');
+          } else if (inp.name === 'email') {
+            const v = inp.value.trim();
+            if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) setFieldError('email', 'Enter a valid email address');
+            else setFieldError('email', '');
+          }
+        });
+      });
 
       document.getElementById('sup-cancel').addEventListener('click', m.close);
-      document.getElementById('sup-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const f = e.target;
-        if (!f.checkValidity()) return f.reportValidity();
-
+      document.getElementById('sup-submit').addEventListener('click', () => {
+        if (!validateSupplierForm(f)) return;
         try {
           pharmacy.saveSupplier({
             id: sup ? sup.id : null,
-            name: f.name.value.trim(),
+            name: f.supName.value.trim(),
             contactPerson: f.contactPerson.value.trim(),
             phone: f.phone.value.trim(),
             email: f.email.value.trim(),
-            typicalMedicines: f.typicalMedicines.value.split(',').map(s => s.trim()).filter(Boolean)
+            rates: sup ? (sup.rates || []) : []
           });
           Toast.show('Supplier saved successfully.');
           supTable.updateData(pharmacy.listSuppliers());
           m.close();
-        } catch(err) {
+        } catch (err) {
+          Toast.show(err.message, 'error');
+        }
+      });
+    }
+
+    /* ── Supplier Rate Management (Task 5) ── */
+    function showRates(sup) {
+      const meds = db.getAll('medicines').filter(m => m.isActive).sort((a, b) => a.name.localeCompare(b.name));
+      let rates = [...(sup.rates || [])];
+
+      function renderRateRows() {
+        const container = document.getElementById('rate-rows');
+        if (!container) return;
+        if (rates.length === 0) {
+          container.innerHTML = '<div class="text-caption" style="padding: var(--sp-2) 0;">No rates configured. Add a medicine below.</div>';
+          return;
+        }
+        container.innerHTML = rates.map((r, i) => {
+          const med = meds.find(m => m.id === r.medicineId);
+          const medName = med ? med.name : '(Unknown medicine)';
+          return `
+            <div class="rate-row" data-idx="${i}">
+              <div class="text-body-sm"><strong>${medName}</strong></div>
+              <div class="text-body-sm">₹${(r.rate / 100).toFixed(2)}/unit</div>
+              <button class="btn btn--danger btn--sm btn--icon btn-del-rate" data-idx="${i}" type="button">
+                <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-x"></use></svg>
+              </button>
+            </div>
+          `;
+        }).join('');
+
+        container.querySelectorAll('.btn-del-rate').forEach(btn => {
+          btn.addEventListener('click', () => {
+            rates.splice(parseInt(btn.dataset.idx), 1);
+            renderRateRows();
+          });
+        });
+      }
+
+      const medOptions = meds.map(m => `<option value="${m.id}">${m.name} (${m.form || m.category}, ${m.strength || ''})</option>`).join('');
+
+      const content = `
+        <div style="margin-bottom: var(--sp-3);">
+          <div class="text-caption">Supplier: <strong>${sup.name}</strong></div>
+          <p class="text-body-sm" style="margin-top: var(--sp-1);">
+            Set fixed unit rates for each medicine this supplier provides.
+            These rates auto-fill when creating Purchase Orders.
+          </p>
+        </div>
+        <div id="rate-rows" style="margin-bottom: var(--sp-4);"></div>
+        <div style="background: var(--bg-muted); padding: var(--sp-3); border-radius: var(--radius-sm);">
+          <div class="text-body-sm" style="font-weight:600; margin-bottom: var(--sp-2);">Add Rate</div>
+          <div class="rate-row" style="grid-template-columns: 1fr 130px 80px;">
+            <div class="form-group" style="margin:0;">
+              <select class="form-input" id="rate-med">
+                <option value="">Select medicine…</option>
+                ${medOptions}
+              </select>
+              <div class="field-error" id="rate-med-err" aria-live="polite"></div>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <input type="number" class="form-input" id="rate-price" min="0.01" step="0.01" placeholder="₹ per unit">
+              <div class="field-error" id="rate-price-err" aria-live="polite"></div>
+            </div>
+            <button class="btn btn--secondary" type="button" id="btn-add-rate">Add</button>
+          </div>
+        </div>
+      `;
+
+      const actions = `
+        <button class="btn btn--secondary" id="rate-cancel">Cancel</button>
+        <button class="btn btn--primary" id="rate-save">Save Rates</button>
+      `;
+
+      const m = Modal.show({ title: `Supplier Rates — ${sup.name}`, content, size: 'md', actions });
+      renderRateRows();
+
+      document.getElementById('btn-add-rate').addEventListener('click', () => {
+        const medId = document.getElementById('rate-med').value;
+        const priceStr = document.getElementById('rate-price').value;
+        let ok = true;
+
+        if (!medId) {
+          document.getElementById('rate-med-err').textContent = 'Select a medicine';
+          document.getElementById('rate-med').closest('.form-group')?.classList.add('has-error');
+          ok = false;
+        } else {
+          document.getElementById('rate-med-err').textContent = '';
+          document.getElementById('rate-med').closest('.form-group')?.classList.remove('has-error');
+        }
+
+        const price = parseFloat(priceStr);
+        if (!priceStr || isNaN(price) || price <= 0) {
+          document.getElementById('rate-price-err').textContent = 'Price must be greater than 0';
+          document.getElementById('rate-price').closest('.form-group')?.classList.add('has-error');
+          ok = false;
+        } else {
+          document.getElementById('rate-price-err').textContent = '';
+          document.getElementById('rate-price').closest('.form-group')?.classList.remove('has-error');
+        }
+
+        if (!ok) return;
+
+        const existing = rates.findIndex(r => r.medicineId === medId);
+        if (existing >= 0) { rates[existing].rate = Math.round(price * 100); }
+        else { rates.push({ medicineId: medId, rate: Math.round(price * 100) }); }
+
+        document.getElementById('rate-med').value = '';
+        document.getElementById('rate-price').value = '';
+        renderRateRows();
+      });
+
+      document.getElementById('rate-cancel').addEventListener('click', m.close);
+      document.getElementById('rate-save').addEventListener('click', () => {
+        try {
+          pharmacy.saveSupplier({ ...sup, rates });
+          Toast.show('Supplier rates saved.');
+          supTable.updateData(pharmacy.listSuppliers());
+          m.close();
+        } catch (err) {
           Toast.show(err.message, 'error');
         }
       });

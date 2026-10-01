@@ -14,17 +14,84 @@
   <link rel="stylesheet" href="../../assets/css/tables.css">
   <link rel="stylesheet" href="../../assets/css/utilities.css">
   <link rel="stylesheet" href="../../assets/css/responsive.css">
+  <link rel="stylesheet" href="./pharmacy.css">
 </head>
 <body>
+  <!-- Print frame (hidden; revealed by @media print) -->
+  <div id="ph-print-frame"></div>
+
   <div class="app" id="app"></div>
   <script type="module">
     import { initShell, getPageContent } from '../../components/app-shell.js';
     import { DataTable, Format, Toast, Modal } from '../../components/ui.js';
     import { pharmacy } from '../../api/pharmacy.js';
+    import { db } from '../../data/db.js';
 
     let invTable;
+    let currentUser;
 
-    initShell(['PHARMACIST', 'ADMIN'], () => {
+    const UNIT_SIZE_OPTIONS = [
+      '1 Strip (10 tabs)', '1 Strip (15 tabs)', '1 Bottle (100ml)',
+      '1 Bottle (200ml)', '1 Bottle (60ml)', '1 Vial', '1 Tube (30g)', '1 Tube (10g)',
+      '1 Box', '1 Sachet', '1 Ampoule', '1 Packet', '1 Pack',
+      '1 Inhaler', '1 Syringe', '1 Injection (single dose)'
+    ];
+
+    const DOSAGE_FORM_OPTIONS = [
+      'Tablet', 'Capsule', 'Syrup', 'Suspension', 'Injection',
+      'Inhaler', 'Drops', 'Ointment', 'Gel', 'Cream', 'Patch',
+      'Suppository', 'Lozenge', 'Powder', 'Granules'
+    ];
+
+    const CATEGORY_OPTIONS = [
+      'Analgesic', 'Antibiotic', 'Antidiabetic', 'Antihypertensive',
+      'Antacid', 'Antihistamine', 'Antifungal', 'Anti-asthmatic',
+      'Antiplatelet', 'Antiemetic', 'Beta-blocker', 'Bronchodilator',
+      'Corticosteroid', 'NSAID', 'Statin', 'Supplement', 'Thyroid',
+      'Vitamin', 'Other'
+    ];
+
+    /* ── Inline validation ── */
+    function setFE(form, name, msg) {
+      const el = form.querySelector(`[name="${name}"]`) || form.querySelector(`#${name}`);
+      const group = el?.closest('.form-group');
+      if (!group) return;
+      group.classList.toggle('has-error', !!msg);
+      group.classList.toggle('has-success', !msg && !!el?.value);
+      const err = group.querySelector('.field-error');
+      if (err) err.textContent = msg || '';
+    }
+    function validateMedForm(f) {
+      let ok = true;
+      const checks = [
+        ['medName',      f.medName?.value?.trim()       ? '' : 'Medicine name is required'],
+        ['genericName',  f.genericName?.value?.trim()   ? '' : 'Generic name is required'],
+        ['category',     f.category?.value               ? '' : 'Category is required'],
+        ['form',         f.form?.value                   ? '' : 'Dosage form is required'],
+        ['strength',     f.strength?.value?.trim()       ? '' : 'Strength is required'],
+        ['unitPrice',    (parseFloat(f.unitPrice?.value) > 0) ? '' : 'Price must be greater than 0'],
+        ['reorderLevel', (parseInt(f.reorderLevel?.value) > 0) ? '' : 'Reorder level must be > 0'],
+      ];
+      for (const [name, msg] of checks) {
+        setFE(f, name, msg);
+        if (msg) ok = false;
+      }
+      // maxStock vs reorderLevel
+      const ms = parseInt(f.maxStock?.value);
+      const rl = parseInt(f.reorderLevel?.value);
+      if (f.maxStock?.value && ms > 0 && ms < rl) {
+        setFE(f, 'maxStock', 'Max stock must be ≥ reorder level');
+        ok = false;
+      }
+      if (!ok) {
+        const first = f.querySelector('.form-group.has-error input, .form-group.has-error select');
+        if (first) first.focus();
+      }
+      return ok;
+    }
+
+    initShell(['PHARMACIST', 'ADMIN'], (session) => {
+      currentUser = session;
       const page = getPageContent();
       page.innerHTML = `
         <div class="page-header">
@@ -51,12 +118,18 @@
       `;
 
       const columns = [
-        { key: 'name', label: 'Medicine', sortable: true, render: r => `<strong>${r.name}</strong><br><span class="text-caption">${r.genericName}</span>` },
-        { key: 'category', label: 'Category', sortable: true },
-        { key: 'price', label: 'Price', sortable: true, render: r => Format.money(r.price) },
-        { key: 'stockLevel', label: 'Stock', sortable: true, render: r => getStockBadge(r) },
-        { key: 'isActive', label: 'Status', sortable: true, render: r => r.isActive ? `<span class="badge badge--success">Active</span>` : `<span class="badge badge--neutral">Inactive</span>` },
-        { key: 'actions', label: '', width: '120px', render: r => `
+        { key: 'name',     label: 'Medicine',  sortable: true, render: r =>
+          `<strong>${r.name}</strong><br><span class="text-caption">${r.genericName} · ${r.strength || ''}</span>` },
+        { key: 'category', label: 'Category',  sortable: true  },
+        { key: 'form',     label: 'Form',      sortable: true  },
+        { key: 'unitSize', label: 'Unit Size',  sortable: false, render: r => r.unitSize || '—' },
+        { key: 'unitPrice',label: 'Price',      sortable: true,  render: r => Format.money(r.unitPrice || r.price || 0) },
+        { key: 'stockLevel',label: 'Stock',     sortable: true,  render: r => getStockBadge(r) },
+        { key: 'isActive', label: 'Status',    sortable: true,  render: r =>
+          r.isActive ? `<span class="badge badge--success">Active</span>` : `<span class="badge badge--neutral">Inactive</span>` },
+        { key: 'actions',  label: '', width: '200px', render: r => `
+          <button class="btn btn--secondary btn--sm btn-edit" data-id="${r.id}" style="margin-right:3px;">Edit</button>
+          <button class="btn btn--primary btn--sm btn-restock" data-id="${r.id}" style="margin-right:3px;">Restock</button>
           <button class="btn btn--secondary btn--sm btn-toggle" data-id="${r.id}">${r.isActive ? 'Deactivate' : 'Activate'}</button>
         `}
       ];
@@ -65,9 +138,9 @@
       invTable.sortAsc = true;
       loadInventory();
 
-      document.getElementById('btn-add-med').addEventListener('click', showAddModal);
-      
-      document.getElementById('inv-table').addEventListener('click', (e) => {
+      document.getElementById('btn-add-med').addEventListener('click', () => showMedModal());
+
+      document.getElementById('inv-table').addEventListener('click', e => {
         const toggleBtn = e.target.closest('.btn-toggle');
         if (toggleBtn) {
           const id = toggleBtn.dataset.id;
@@ -75,102 +148,349 @@
           pharmacy.updateMedicineStatus(id, !med.isActive);
           Toast.show(`Medicine ${!med.isActive ? 'activated' : 'deactivated'}.`);
           loadInventory();
+          return;
+        }
+        const editBtn = e.target.closest('.btn-edit');
+        if (editBtn) {
+          const med = pharmacy.listMedicines().find(m => m.id === editBtn.dataset.id);
+          showMedModal(med);
+          return;
+        }
+        const restockBtn = e.target.closest('.btn-restock');
+        if (restockBtn) {
+          const med = pharmacy.listMedicines().find(m => m.id === restockBtn.dataset.id);
+          showRestockModal(med);
         }
       });
     });
 
     function getStockBadge(med) {
-      if (med.stockLevel === 0) return `<span class="badge badge--danger">Out of Stock (0)</span>`;
-      if (med.stockLevel <= med.reorderLevel) return `<span class="badge badge--warning">Low Stock (${med.stockLevel})</span>`;
-      
-      // Check expiry logic for oldest batch
       const today = new Date().toISOString().split('T')[0];
-      const validBatches = med.batches.filter(b => b.quantity > 0).sort((a,b) => a.expiryDate.localeCompare(b.expiryDate));
-      
-      if (validBatches.length > 0) {
-        const nearestExpiry = validBatches[0].expiryDate;
-        if (nearestExpiry < today) {
-          return `<span class="badge badge--danger">Expired (${med.stockLevel})</span>`;
-        }
-      }
-      return `<span class="badge badge--success">In Stock (${med.stockLevel})</span>`;
+      const vb = (med.batches || []).filter(b => b.quantity > 0 && b.expiryDate >= today);
+      const stock = vb.reduce((s, b) => s + b.quantity, 0);
+
+      if (stock === 0) return `<span class="badge badge--danger">Out of Stock (0)</span>`;
+      if (stock <= med.reorderLevel) return `<span class="badge badge--warning">Low Stock (${stock})</span>`;
+      return `<span class="badge badge--success">In Stock (${stock})</span>`;
     }
 
     function loadInventory() {
       invTable.updateData(pharmacy.listMedicines());
     }
 
-    function showAddModal() {
+    /* ── Add / Edit Medicine Modal ── */
+    function showMedModal(med = null) {
+      const isEdit = !!med;
+      const unitSizeOpts = UNIT_SIZE_OPTIONS.map(o =>
+        `<option value="${o}" ${med?.unitSize === o ? 'selected' : ''}>${o}</option>`).join('');
+      const formOpts = DOSAGE_FORM_OPTIONS.map(o =>
+        `<option value="${o}" ${(med?.form === o) ? 'selected' : ''}>${o}</option>`).join('');
+      const catOpts = CATEGORY_OPTIONS.map(o =>
+        `<option value="${o}" ${(med?.category === o) ? 'selected' : ''}>${o}</option>`).join('');
+
+      const currentUnitPrice = med ? ((med.unitPrice || med.price || 0) / 100).toFixed(2) : '';
+
       const content = `
-        <form id="add-med-form" style="display:flex;flex-direction:column;gap:var(--sp-4);">
+        <form id="med-form" novalidate style="display:flex;flex-direction:column;gap:var(--sp-4);">
           <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
             <div class="form-group">
               <label class="form-group__label">Medicine Name *</label>
-              <input type="text" class="form-input" name="name" required>
+              <input type="text" class="form-input" name="medName" value="${med ? med.name : ''}" autocomplete="off">
+              <div class="field-error" aria-live="polite"></div>
             </div>
             <div class="form-group">
               <label class="form-group__label">Generic Name *</label>
-              <input type="text" class="form-input" name="genericName" required>
+              <input type="text" class="form-input" name="genericName" value="${med ? med.genericName : ''}" autocomplete="off">
+              <div class="field-error" aria-live="polite"></div>
             </div>
           </div>
           <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
             <div class="form-group">
               <label class="form-group__label">Category *</label>
-              <select class="form-input" name="category" required>
-                <option value="Tablet">Tablet</option>
-                <option value="Syrup">Syrup</option>
-                <option value="Injection">Injection</option>
-                <option value="Ointment">Ointment</option>
-                <option value="Drops">Drops</option>
+              <select class="form-input" name="category">
+                <option value="">Select…</option>${catOpts}
               </select>
+              <div class="field-error" aria-live="polite"></div>
             </div>
             <div class="form-group">
-              <label class="form-group__label">Unit Size</label>
-              <input type="text" class="form-input" name="unit" placeholder="e.g. 1 Strip (10 tabs)">
+              <label class="form-group__label">Dosage Form *</label>
+              <select class="form-input" name="form">
+                <option value="">Select…</option>${formOpts}
+              </select>
+              <div class="field-error" aria-live="polite"></div>
             </div>
           </div>
           <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
             <div class="form-group">
-              <label class="form-group__label">Price (₹) *</label>
-              <input type="number" class="form-input" name="price" required min="0.01" step="0.01">
+              <label class="form-group__label">Strength *</label>
+              <input type="text" class="form-input" name="strength" value="${med ? (med.strength || '') : ''}" placeholder="e.g. 500mg, 10mcg">
+              <div class="field-error" aria-live="polite"></div>
             </div>
             <div class="form-group">
+              <label class="form-group__label">Manufacturer</label>
+              <input type="text" class="form-input" name="manufacturer" value="${med ? (med.manufacturer || '') : ''}">
+            </div>
+          </div>
+          <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
+            <div class="form-group">
+              <label class="form-group__label">Unit Size</label>
+              <select class="form-input" name="unitSize">
+                <option value="">Select unit size…</option>${unitSizeOpts}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-group__label">Unit Price (₹) *</label>
+              <input type="number" class="form-input" name="unitPrice" value="${currentUnitPrice}" min="0.01" step="0.01" placeholder="Price per unit">
+              <div class="field-error" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
+            <div class="form-group">
               <label class="form-group__label">Reorder Level *</label>
-              <input type="number" class="form-input" name="reorderLevel" required min="1" value="20">
+              <input type="number" class="form-input" name="reorderLevel" value="${med ? med.reorderLevel : 20}" min="1">
+              <div class="field-error" aria-live="polite"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-group__label">Max Stock Limit</label>
+              <input type="number" class="form-input" name="maxStock" value="${med?.maxStock || ''}" min="1" placeholder="Optional">
+              <div class="field-error" aria-live="polite"></div>
             </div>
           </div>
         </form>
       `;
 
       const actions = `
-        <button class="btn btn--secondary" id="add-cancel">Cancel</button>
-        <button class="btn btn--primary" id="add-submit" form="add-med-form">Add Medicine</button>
+        <button class="btn btn--secondary" id="med-cancel">Cancel</button>
+        <button class="btn btn--primary" id="med-submit">${isEdit ? 'Save Changes' : 'Add Medicine'}</button>
       `;
 
-      const m = Modal.show({ title: 'Add Medicine', content, size: 'md', actions });
+      const m = Modal.show({ title: isEdit ? 'Edit Medicine' : 'Add Medicine', content, size: 'lg', actions });
+      const f = document.getElementById('med-form');
 
-      document.getElementById('add-cancel').addEventListener('click', m.close);
-      document.getElementById('add-med-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const f = e.target;
-        if (!f.checkValidity()) return f.reportValidity();
+      /* Blur validation */
+      f.querySelectorAll('input, select').forEach(el => {
+        el.addEventListener('blur', () => {
+          const n = el.name;
+          if (n === 'medName') setFE(f, 'medName', el.value.trim() ? '' : 'Medicine name is required');
+          else if (n === 'genericName') setFE(f, 'genericName', el.value.trim() ? '' : 'Generic name is required');
+          else if (n === 'category') setFE(f, 'category', el.value ? '' : 'Category is required');
+          else if (n === 'form') setFE(f, 'form', el.value ? '' : 'Dosage form is required');
+          else if (n === 'strength') setFE(f, 'strength', el.value.trim() ? '' : 'Strength is required');
+          else if (n === 'unitPrice') setFE(f, 'unitPrice', parseFloat(el.value) > 0 ? '' : 'Price must be greater than 0');
+          else if (n === 'reorderLevel') setFE(f, 'reorderLevel', parseInt(el.value) > 0 ? '' : 'Reorder level must be > 0');
+          else if (n === 'maxStock') {
+            const ms = parseInt(el.value), rl = parseInt(f.reorderLevel?.value);
+            if (el.value && ms < rl) setFE(f, 'maxStock', 'Max stock must be ≥ reorder level');
+            else setFE(f, 'maxStock', '');
+          }
+        });
+      });
 
+      document.getElementById('med-cancel').addEventListener('click', m.close);
+      document.getElementById('med-submit').addEventListener('click', () => {
+        if (!validateMedForm(f)) return;
         try {
-          pharmacy.addMedicine({
-            name: f.name.value.trim(),
+          const payload = {
+            name: f.medName.value.trim(),
             genericName: f.genericName.value.trim(),
             category: f.category.value,
-            unit: f.unit.value.trim(),
-            price: Math.round(parseFloat(f.price.value) * 100), // convert to paise
-            reorderLevel: parseInt(f.reorderLevel.value)
-          });
-          Toast.show('Medicine added successfully.');
+            form: f.form.value,
+            strength: f.strength.value.trim(),
+            manufacturer: f.manufacturer.value.trim(),
+            unitSize: f.unitSize.value,
+            unitPrice: Math.round(parseFloat(f.unitPrice.value) * 100),
+            reorderLevel: parseInt(f.reorderLevel.value),
+            maxStock: f.maxStock.value ? parseInt(f.maxStock.value) : null,
+          };
+          if (isEdit) {
+            pharmacy.updateMedicine(med.id, payload);
+            Toast.show('Medicine updated successfully.');
+          } else {
+            pharmacy.addMedicine(payload);
+            Toast.show('Medicine added successfully.');
+          }
           loadInventory();
           m.close();
-        } catch(err) {
+        } catch (err) {
           Toast.show(err.message, 'error');
         }
       });
+    }
+
+    /* ── Restock Modal (Task 4) ── */
+    function showRestockModal(med) {
+      const today = new Date().toISOString().split('T')[0];
+      const vbStock = (med.batches || []).filter(b => b.quantity > 0 && b.expiryDate >= today)
+        .reduce((s, b) => s + b.quantity, 0);
+      const expiredCount = (med.batches || []).filter(b => b.expiryDate < today && b.quantity > 0).length;
+      const canAdd = med.maxStock ? med.maxStock - vbStock : null;
+
+      const suppliers = pharmacy.listSuppliers();
+      const supOptions = suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+      const pos = pharmacy.listPurchases().filter(p => p.status === 'ORDERED' || p.status === 'PARTIALLY_RECEIVED');
+      const poOptions = pos.map(p => `<option value="${p.id}">${p.id.split('-').pop().toUpperCase()} — ${db.getById('suppliers', p.supplierId).name}</option>`).join('');
+
+      const content = `
+        ${expiredCount > 0 ? `<div class="expired-purge-banner">⚠ This medicine has ${expiredCount} expired batch(es) with remaining units. They will be automatically removed when you restock.</div>` : ''}
+        <div style="margin-bottom: var(--sp-4);">
+          <strong>${med.name}</strong> (${med.genericName})<br>
+          <span class="text-caption">Current valid stock: ${vbStock}${med.maxStock ? ` / Max: ${med.maxStock} (can add: ${Math.max(0, canAdd)})` : ''}</span>
+        </div>
+        <form id="restock-form" novalidate style="display:flex;flex-direction:column;gap:var(--sp-4);">
+          <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
+            <div class="form-group">
+              <label class="form-group__label">Batch Number *</label>
+              <input type="text" class="form-input" name="batchNo" placeholder="e.g. B2026X01" autocomplete="off">
+              <div class="field-error" aria-live="polite"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-group__label">Expiry Date *</label>
+              <input type="date" class="form-input" name="expiryDate" min="${today}">
+              <div class="field-error" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
+            <div class="form-group">
+              <label class="form-group__label">Quantity *</label>
+              <input type="number" class="form-input" name="quantity" min="1" ${canAdd !== null ? `max="${canAdd}"` : ''} placeholder="Units to add">
+              <div class="field-error" aria-live="polite"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-group__label">Supplier (optional)</label>
+              <select class="form-input" name="supplierId">
+                <option value="">— None —</option>${supOptions}
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-group__label">Link to PO (optional)</label>
+            <select class="form-input" name="poId">
+              <option value="">— None —</option>${poOptions}
+            </select>
+          </div>
+        </form>
+      `;
+
+      const actions = `
+        <button class="btn btn--secondary" id="rs-cancel">Cancel</button>
+        <button class="btn btn--primary" id="rs-submit">Receive Stock</button>
+        <button class="btn btn--secondary btn-print no-print" id="rs-print" style="display:none;">🖨 Print Receipt</button>
+      `;
+
+      const m = Modal.show({ title: `Restock — ${med.name}`, content, size: 'md', actions });
+      const f = document.getElementById('restock-form');
+
+      /* Blur validation */
+      f.querySelectorAll('input').forEach(el => {
+        el.addEventListener('blur', () => {
+          if (el.name === 'batchNo') setFE(f, 'batchNo', el.value.trim() ? '' : 'Batch number is required');
+          if (el.name === 'expiryDate') {
+            if (!el.value) setFE(f, 'expiryDate', 'Expiry date is required');
+            else if (el.value <= today) setFE(f, 'expiryDate', 'Expiry date must be in the future');
+            else setFE(f, 'expiryDate', '');
+          }
+          if (el.name === 'quantity') {
+            const q = parseInt(el.value);
+            if (!q || q <= 0) { setFE(f, 'quantity', 'Quantity must be > 0'); }
+            else if (canAdd !== null && q > canAdd) { setFE(f, 'quantity', `Cannot exceed max limit. Can add at most ${canAdd} units.`); }
+            else setFE(f, 'quantity', '');
+          }
+        });
+      });
+
+      document.getElementById('rs-cancel').addEventListener('click', m.close);
+      document.getElementById('rs-submit').addEventListener('click', () => {
+        // Validate
+        let ok = true;
+        const batchNo = f.batchNo.value.trim();
+        const expiryDate = f.expiryDate.value;
+        const qty = parseInt(f.quantity.value);
+
+        if (!batchNo) { setFE(f, 'batchNo', 'Batch number is required'); ok = false; }
+        else setFE(f, 'batchNo', '');
+
+        if (!expiryDate) { setFE(f, 'expiryDate', 'Expiry date is required'); ok = false; }
+        else if (expiryDate <= today) { setFE(f, 'expiryDate', 'Expiry date must be in the future'); ok = false; }
+        else setFE(f, 'expiryDate', '');
+
+        if (!qty || qty <= 0) { setFE(f, 'quantity', 'Quantity must be > 0'); ok = false; }
+        else if (canAdd !== null && qty > canAdd) { setFE(f, 'quantity', `Cannot exceed max limit. Can add at most ${canAdd}.`); ok = false; }
+        else setFE(f, 'quantity', '');
+
+        if (!ok) {
+          const first = f.querySelector('.form-group.has-error input');
+          if (first) first.focus();
+          return;
+        }
+
+        try {
+          const result = pharmacy.restockMedicine({
+            medicineId: med.id,
+            quantity: qty,
+            batchNo,
+            expiryDate,
+            supplierId: f.supplierId.value || null,
+            poId: f.poId.value || null,
+            performedBy: currentUser.staffId
+          });
+
+          let msg = `Stock received: ${qty} units of ${med.name}.`;
+          if (result.expiredInfo.removedCount > 0) {
+            msg += ` (${result.expiredInfo.removedCount} expired batch(es) with ${result.expiredInfo.removedUnits} units removed automatically.)`;
+          }
+          Toast.show(msg);
+
+          // Show print button
+          const printBtn = document.getElementById('rs-print');
+          if (printBtn) {
+            printBtn.style.display = '';
+            printBtn.onclick = () => printStockReceipt({
+              medicine: med,
+              qty, batchNo, expiryDate,
+              supplierId: f.supplierId.value,
+              poId: f.poId.value,
+              performedBy: currentUser.staffName
+            });
+          }
+
+          loadInventory();
+          // Disable submit to prevent double-submit
+          document.getElementById('rs-submit').disabled = true;
+        } catch (err) {
+          Toast.show(err.message, 'error');
+        }
+      });
+    }
+
+    /* ── Print: Stock Receipt ── */
+    function printStockReceipt({ medicine, qty, batchNo, expiryDate, supplierId, poId, performedBy }) {
+      const sup = supplierId ? (() => { try { return db.getById('suppliers', supplierId).name; } catch { return ''; } })() : '';
+      const frame = document.getElementById('ph-print-frame');
+      frame.innerHTML = `
+        <div class="print-header">
+          <div>
+            <div class="print-clinic-name">Clinova Healthcare</div>
+            <div class="print-doc-title">Stock Receipt</div>
+          </div>
+          <div style="text-align:right;">
+            <div>Date: ${new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</div>
+            <div>Batch: ${batchNo}</div>
+          </div>
+        </div>
+        <div class="print-meta">
+          <div><strong>Medicine:</strong> ${medicine.name}</div>
+          <div><strong>Generic:</strong> ${medicine.genericName}</div>
+          <div><strong>Form:</strong> ${medicine.form || ''}</div>
+          <div><strong>Strength:</strong> ${medicine.strength || ''}</div>
+          <div><strong>Quantity Received:</strong> ${qty}</div>
+          <div><strong>Expiry Date:</strong> ${expiryDate}</div>
+          ${sup ? `<div><strong>Supplier:</strong> ${sup}</div>` : ''}
+          ${poId ? `<div><strong>PO Reference:</strong> ${poId}</div>` : ''}
+          <div><strong>Received By:</strong> ${performedBy}</div>
+        </div>
+        <div class="print-footer">Clinova Healthcare — Stock management records are retained for audit purposes.</div>
+      `;
+      window.print();
     }
   </script>
 </body>
