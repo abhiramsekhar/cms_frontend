@@ -3,14 +3,14 @@
  *
  * Renders the header bar with:
  *  - Hamburger (< 1024px)
- *  - Search box (visual only for now)
+ *  - Search box (hidden for Lab Technicians)
  *  - Notification bell with dropdown
  *  - User menu with Log out
  */
 
 import { db } from '../data/db.js';
 import { auth } from '../api/auth.js';
-import { Format } from './ui.js';
+import { Format, Toast } from './ui.js';
 
 function icon(id, cls = '') {
   return `<svg class="icon${cls ? ' ' + cls : ''}" aria-hidden="true"><use href="${getBasePath()}assets/icons/sprite.svg#${id}"></use></svg>`;
@@ -78,17 +78,19 @@ export function renderTopbar(container, session) {
       <button class="hamburger" id="sidebar-toggle" aria-label="Toggle sidebar">
         ${icon('icon-menu')}
       </button>
-      <div class="search-bar" id="global-search">
-        <span class="search-bar__icon">${icon('icon-search', 'icon--sm')}</span>
-        <input type="text" class="search-bar__input" placeholder="Search patients, appointments…" aria-label="Search" id="search-input" autocomplete="off">
-        <button id="search-clear" class="btn btn--ghost btn--icon" style="display:none; position: absolute; right: 40px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; min-height: 24px;" aria-label="Clear search">
-          ${icon('icon-x', 'icon--sm')}
-        </button>
-        <kbd class="search-bar__kbd">⌘K</kbd>
-        <div class="dropdown__menu" id="search-dropdown" style="width: 100%; top: calc(100% + 4px); max-height: 400px; overflow-y: auto;">
-          <div id="search-results"></div>
+      ${session.role === 'LAB_TECH' ? '' : `
+        <div class="search-bar" id="global-search">
+          <span class="search-bar__icon">${icon('icon-search', 'icon--sm')}</span>
+          <input type="text" class="search-bar__input" placeholder="Search patients, appointments…" aria-label="Search" id="search-input" autocomplete="off">
+          <button id="search-clear" class="btn btn--ghost btn--icon" style="display:none; position: absolute; right: 40px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; min-height: 24px;" aria-label="Clear search">
+            ${icon('icon-x', 'icon--sm')}
+          </button>
+          <kbd class="search-bar__kbd">⌘K</kbd>
+          <div class="dropdown__menu" id="search-dropdown" style="width: 100%; top: calc(100% + 4px); max-height: 400px; overflow-y: auto;">
+            <div id="search-results"></div>
+          </div>
         </div>
-      </div>
+      `}
     </div>
     <div class="topbar__right">
       <div class="notification-bell dropdown" id="notification-area">
@@ -302,7 +304,23 @@ function setupTopbarEvents(session, updateUnreadCount) {
     if (e.key === 'clinova.v1.notifications') {
       updateUnreadCount();
       populateNotifications(session);
+
+      const previousIds = new Set(JSON.parse(e.oldValue || '[]').map(notification => notification.id));
+      const newCriticalAlerts = JSON.parse(e.newValue || '[]').filter(notification =>
+        notification.type === 'CRITICAL_RESULT' &&
+        notification.targetUserId === session.userId &&
+        !notification.isRead &&
+        !previousIds.has(notification.id)
+      );
+      for (const alert of newCriticalAlerts) {
+        Toast.show(alert.message, 'error');
+      }
     }
+  });
+
+  window.addEventListener('clinova:notifications-updated', () => {
+    updateUnreadCount();
+    populateNotifications(session);
   });
 
   // User menu dropdown

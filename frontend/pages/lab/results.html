@@ -17,8 +17,9 @@
   <style>
     @media print {
       body { background: white; }
-      .app-shell__sidebar, .app-shell__topbar, .page-header__actions { display: none !important; }
-      .app-shell__main { margin: 0 !important; padding: 0 !important; border: none !important; }
+      .sidebar, .sidebar-overlay, .header, .topbar, .page-header__actions { display: none !important; }
+      .main { margin: 0 !important; padding: 0 !important; border: none !important; }
+      .main__inner { padding: 0 !important; max-width: none !important; }
       .card { border: none; box-shadow: none; margin: 0; }
       .print-header { display: flex !important; }
     }
@@ -32,6 +33,7 @@
     import { initShell, getPageContent } from '../../components/app-shell.js';
     import { db } from '../../data/db.js';
     import { Format } from '../../components/ui.js';
+    import { formatReferenceRange } from '../../api/laboratory.js';
 
     initShell(['LAB_TECH', 'ADMIN', 'DOCTOR'], () => {
       const page = getPageContent();
@@ -115,7 +117,7 @@
                     ${r.value} ${r.unit} 
                     ${r.isAbnormal ? `<sup>${r.flag === 'High' ? '↑' : (r.flag==='Low' ? '↓' : '*')}</sup>` : ''}
                   </td>
-                  <td style="padding:var(--sp-3); border-top:1px solid var(--border);" class="text-caption">${r.referenceRange}</td>
+                  <td style="padding:var(--sp-3); border-top:1px solid var(--border);" class="text-caption">${formatReferenceRange(test.parameters.find(param => param.name === r.parameter)) || r.referenceRange || 'Not specified'}</td>
                 </tr>
               `).join('')}
             </tbody>

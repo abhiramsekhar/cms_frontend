@@ -20,7 +20,7 @@
   <script type="module">
     import { initShell, getPageContent } from '../../components/app-shell.js';
     import { DataTable, Format, Badge, Modal, Toast } from '../../components/ui.js';
-    import { laboratory } from '../../api/laboratory.js';
+    import { formatReferenceRange, laboratory } from '../../api/laboratory.js';
     import { db } from '../../data/db.js';
 
     let qTable;
@@ -129,7 +129,7 @@
                     </div>
                   </td>
                   <td style="padding:var(--sp-2); border-top:1px solid var(--border); font-size:0.875rem;">
-                    ${p.min != null ? p.min : ''} - ${p.max != null ? p.max : ''} ${p.unit}
+                    ${formatReferenceRange(p)}
                   </td>
                 </tr>
               `).join('')}
@@ -167,8 +167,14 @@
           confirmText: 'Finalize & Lock',
           onConfirm: () => {
             try {
-              laboratory.enterResult(id, data, currentUser.staffId);
-              Toast.show('Results finalized successfully.');
+              const result = laboratory.enterResult(id, data, currentUser.staffId);
+              if (result.isCritical) {
+                const doctor = db.getById('staff', result.doctorId);
+                Toast.show(`Critical result finalized and sent to ${doctor.name}.`, 'error');
+                window.dispatchEvent(new Event('clinova:notifications-updated'));
+              } else {
+                Toast.show('Results finalized successfully.');
+              }
               m.close();
               loadQueue();
             } catch(err) { Toast.show(err.message, 'error'); }

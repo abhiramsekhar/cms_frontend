@@ -81,6 +81,9 @@ const MENUS = {
       { label: 'Completed Tests', icon: 'icon-check-circle',   href: 'pages/lab/completed-tests.html', id: 'nav-completed' },
       { label: 'Results',         icon: 'icon-file-text',      href: 'pages/lab/results.html',          id: 'nav-results' },
     ]},
+    { label: 'Billing', items: [
+      { label: 'Billing & Receipts', icon: 'icon-receipt', href: 'pages/lab/billing.html', id: 'nav-lab-billing' },
+    ]},
     { label: 'Reference', items: [
       { label: 'Test Catalog', icon: 'icon-flask', href: 'pages/lab/catalog.html', id: 'nav-test-catalog' },
     ]},

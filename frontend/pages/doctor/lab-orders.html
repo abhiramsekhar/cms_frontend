@@ -20,7 +20,7 @@
   <script type="module">
     import { initShell, getPageContent } from '../../components/app-shell.js';
     import { DataTable, Format, Badge, Modal } from '../../components/ui.js';
-    import { laboratory } from '../../api/laboratory.js';
+    import { formatReferenceRange, laboratory } from '../../api/laboratory.js';
     import { db } from '../../data/db.js';
 
     let labTable;
@@ -110,7 +110,7 @@
       
       const order = safeGet('labOrders', id);
       if (!order) return;
-      const test = safeGet('labCatalog', order.testId) || { name: 'Unknown Test' };
+      const test = safeGet('labCatalog', order.testId) || { name: 'Unknown Test', parameters: [] };
       const p = safeGet('patients', order.patientId) || { name: 'Unknown Patient', mrn: '-' };
       
       let resHtml = '';
@@ -125,7 +125,7 @@
                 <tr>
                   <td>${escapeHtml(r.parameter)}</td>
                   <td style="${r.isAbnormal ? 'color:var(--danger);font-weight:bold;' : ''}">${escapeHtml(r.value)} ${escapeHtml(r.unit)}</td>
-                  <td class="text-caption">${escapeHtml(r.referenceRange)}</td>
+                  <td class="text-caption">${escapeHtml(formatReferenceRange(test.parameters.find(param => param.name === r.parameter)) || r.referenceRange || 'Not specified')}</td>
                 </tr>
               `).join('')}
             </tbody>

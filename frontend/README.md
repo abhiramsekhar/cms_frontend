@@ -8,7 +8,7 @@ A fully functional, client-side prototype of a Hospital Management System. It us
 - **Patient Registration & Billing**: Register patients, book appointments, generate invoices, and collect partial/full payments.
 - **Clinical Consultations**: Write clinical notes, issue prescriptions with automated allergy checking, and order lab tests.
 - **Pharmacy & Inventory**: FEFO (First-Expire-First-Out) dispensing, stock alerts, supplier management, and purchase order tracking.
-- **Laboratory**: Priority-sorted test queue, critical result flagging, and printable finalized reports.
+- **Laboratory**: Priority-sorted test queue, critical result flagging, printable finalized reports, test billing, and printable payment receipts.
 - **Administration**: Manage staff, users, departments, lab catalog pricing, audit logs, and global settings.
 - **Dashboard Reporting**: Centralized dashboard metrics with CSV export functionality.
 
@@ -61,4 +61,3 @@ The application includes a deterministic system seed. The following credentials 
 ## Resetting Data
 
 To start fresh, log in as Admin, go to **Settings > Data Management**, and click **Reset to System Data**. Alternatively, navigate to `/frontend/pages/shared/devtools.html` and click the Reset button.
-

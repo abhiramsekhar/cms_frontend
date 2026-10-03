@@ -20,7 +20,7 @@
   <script type="module">
     import { initShell, getPageContent } from '../../components/app-shell.js';
     import { DataTable, Format, Modal } from '../../components/ui.js';
-    import { laboratory } from '../../api/laboratory.js';
+    import { formatReferenceRange, laboratory } from '../../api/laboratory.js';
 
     let catTable;
 
@@ -82,7 +82,7 @@
                   <tr>
                     <td style="padding:var(--sp-2); border-top:1px solid var(--border);">${p.name}</td>
                     <td style="padding:var(--sp-2); border-top:1px solid var(--border);">${p.unit}</td>
-                    <td style="padding:var(--sp-2); border-top:1px solid var(--border);" class="text-caption">${p.min != null ? p.min : ''} - ${p.max != null ? p.max : ''}</td>
+                    <td style="padding:var(--sp-2); border-top:1px solid var(--border);" class="text-caption">${formatReferenceRange(p, false)}</td>
                   </tr>
                 `).join('')}
               </tbody>
