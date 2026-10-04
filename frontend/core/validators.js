@@ -33,7 +33,7 @@ export function validatePhone(raw, label = 'Phone number') {
   if (!v) return fail(`${label} is required.`);
   if (!/^\+?[\d\s()-]+$/.test(v)) return fail(`${label} contains invalid characters.`);
   const digits = v.replace(/\D/g, '');
-  if (digits.length < 10 || digits.length > 15) return fail(`${label} must have 10–15 digits.`);
+  if (!/^[6-9]\d{9}$/.test(digits)) return fail(`${label} must be a 10-digit number starting with 6, 7, 8, or 9.`);
   return ok(v);
 }
 
