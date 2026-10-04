@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="../../assets/css/utilities.css">
   <link rel="stylesheet" href="../../assets/css/responsive.css">
   <link rel="stylesheet" href="./pharmacy.css">
+  <link rel="stylesheet" href="./pharmacy-chrome.css">
 </head>
 <body>
   <div class="app" id="app"></div>
@@ -211,8 +212,9 @@
 
     /* ── Supplier Rate Management (Task 5) ── */
     function showRates(sup) {
-      const meds = db.getAll('medicines').filter(m => m.isActive).sort((a, b) => a.name.localeCompare(b.name));
-      let rates = [...(sup.rates || [])];
+      const allMeds = db.getAll('medicines');
+      const meds = allMeds.filter(m => m.isActive).sort((a, b) => a.name.localeCompare(b.name));
+      let rates = (sup.rates || []).map(r => ({ ...r }));  // one entry per medicine for THIS supplier
 
       function renderRateRows() {
         const container = document.getElementById('rate-rows');
@@ -222,8 +224,8 @@
           return;
         }
         container.innerHTML = rates.map((r, i) => {
-          const med = meds.find(m => m.id === r.medicineId);
-          const medName = med ? med.name : '(Unknown medicine)';
+          const med = allMeds.find(m => m.id === r.medicineId);
+          const medName = med ? (med.isActive ? med.name : `${med.name} (inactive)`) : '(Unknown medicine)';
           return `
             <div class="rate-row" data-idx="${i}">
               <div class="text-body-sm"><strong>${medName}</strong></div>
@@ -249,8 +251,9 @@
         <div style="margin-bottom: var(--sp-3);">
           <div class="text-caption">Supplier: <strong>${sup.name}</strong></div>
           <p class="text-body-sm" style="margin-top: var(--sp-1);">
-            Set fixed unit rates for each medicine this supplier provides.
-            These rates auto-fill when creating Purchase Orders.
+            Set the fixed unit rate this supplier charges for each medicine. Rates are per supplier,
+            so the same medicine can have a different rate for each supplier.
+            Purchase Orders can only include medicines with a rate here, and the rate is applied automatically.
           </p>
         </div>
         <div id="rate-rows" style="margin-bottom: var(--sp-4);"></div>
@@ -281,6 +284,16 @@
       const m = Modal.show({ title: `Supplier Rates — ${sup.name}`, content, size: 'md', actions });
       renderRateRows();
 
+      /* Picking a medicine that already has a rate loads it, so Add updates it instead of duplicating */
+      const rateMedEl = document.getElementById('rate-med');
+      const ratePriceEl = document.getElementById('rate-price');
+      const addRateBtn = document.getElementById('btn-add-rate');
+      rateMedEl.addEventListener('change', () => {
+        const cur = rates.find(r => r.medicineId === rateMedEl.value);
+        ratePriceEl.value = cur ? (cur.rate / 100).toFixed(2) : '';
+        addRateBtn.textContent = cur ? 'Update' : 'Add';
+      });
+
       document.getElementById('btn-add-rate').addEventListener('click', () => {
         const medId = document.getElementById('rate-med').value;
         const priceStr = document.getElementById('rate-price').value;
@@ -300,6 +313,10 @@
           document.getElementById('rate-price-err').textContent = 'Price must be greater than 0';
           document.getElementById('rate-price').closest('.form-group')?.classList.add('has-error');
           ok = false;
+        } else if (Math.abs(price * 100 - Math.round(price * 100)) > 1e-6) {
+          document.getElementById('rate-price-err').textContent = 'Use at most 2 decimal places';
+          document.getElementById('rate-price').closest('.form-group')?.classList.add('has-error');
+          ok = false;
         } else {
           document.getElementById('rate-price-err').textContent = '';
           document.getElementById('rate-price').closest('.form-group')?.classList.remove('has-error');
@@ -313,6 +330,7 @@
 
         document.getElementById('rate-med').value = '';
         document.getElementById('rate-price').value = '';
+        addRateBtn.textContent = 'Add';
         renderRateRows();
       });
 
@@ -329,5 +347,6 @@
       });
     }
   </script>
+  <script type="module" src="./pharmacy-shell.js"></script>
 </body>
 </html>

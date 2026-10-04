@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="../../assets/css/utilities.css">
   <link rel="stylesheet" href="../../assets/css/responsive.css">
   <link rel="stylesheet" href="./pharmacy.css">
+  <link rel="stylesheet" href="./pharmacy-chrome.css">
 </head>
 <body>
   <!-- Print frame (hidden; revealed by @media print) -->
@@ -30,8 +31,29 @@
     let invTable;
     let currentUser;
 
+    const MED_NOT_FOUND_MSG = 'Medicine not found in inventory. Please add/configure the medicine before purchasing stock.';
+
+    /**
+     * Single entry point for every Restock action (row button and ?restock=<id> links from
+     * Stock Alerts / Dashboard). Only an existing, active inventory medicine can be restocked;
+     * anything else is sent to the Purchase page instead of creating a record.
+     */
+    function openRestock(medId) {
+      const med = pharmacy.listMedicines().find(m => m.id === medId);
+      if (!med) {
+        Toast.show(MED_NOT_FOUND_MSG, 'error');
+        setTimeout(() => { window.location.href = 'purchases.html?notice=medicine-not-found'; }, 1500);
+        return;
+      }
+      if (!med.isActive) {
+        Toast.show(`${med.name} is inactive. Activate it before restocking.`, 'error');
+        return;
+      }
+      showRestockModal(med);
+    }
+
     const UNIT_SIZE_OPTIONS = [
-      '1 Strip (10 tabs)', '1 Strip (15 tabs)', '1 Bottle (100ml)',
+      '1 Strip (10 tabs)', '1 Strip (15 tabs)', '1 Strip (10 caps)', '1 Bottle (100ml)',
       '1 Bottle (200ml)', '1 Bottle (60ml)', '1 Vial', '1 Tube (30g)', '1 Tube (10g)',
       '1 Box', '1 Sachet', '1 Ampoule', '1 Packet', '1 Pack',
       '1 Inhaler', '1 Syringe', '1 Injection (single dose)'
@@ -69,6 +91,7 @@
         ['category',     f.category?.value               ? '' : 'Category is required'],
         ['form',         f.form?.value                   ? '' : 'Dosage form is required'],
         ['strength',     f.strength?.value?.trim()       ? '' : 'Strength is required'],
+        ['unitSize',     f.unitSize?.value               ? '' : 'Unit size is required'],
         ['unitPrice',    (parseFloat(f.unitPrice?.value) > 0) ? '' : 'Price must be greater than 0'],
         ['reorderLevel', (parseInt(f.reorderLevel?.value) > 0) ? '' : 'Reorder level must be > 0'],
       ];
@@ -157,21 +180,23 @@
           return;
         }
         const restockBtn = e.target.closest('.btn-restock');
-        if (restockBtn) {
-          const med = pharmacy.listMedicines().find(m => m.id === restockBtn.dataset.id);
-          showRestockModal(med);
-        }
+        if (restockBtn) openRestock(restockBtn.dataset.id);
       });
+
+      // Arrived from Stock Alerts / Dashboard → open that medicine's restock (or redirect if it no longer exists)
+      const restockParam = new URLSearchParams(window.location.search).get('restock');
+      if (restockParam) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        openRestock(restockParam);
+      }
     });
 
     function getStockBadge(med) {
-      const today = new Date().toISOString().split('T')[0];
-      const vb = (med.batches || []).filter(b => b.quantity > 0 && b.expiryDate >= today);
-      const stock = vb.reduce((s, b) => s + b.quantity, 0);
-
-      if (stock === 0) return `<span class="badge badge--danger">Out of Stock (0)</span>`;
-      if (stock <= med.reorderLevel) return `<span class="badge badge--warning">Low Stock (${stock})</span>`;
-      return `<span class="badge badge--success">In Stock (${stock})</span>`;
+      // Valid (non-expired) stock vs reorder level — same rule as Stock Alerts and the Dashboard
+      const { status, available } = pharmacy.getStockStatus(med);
+      if (status === 'OUT_OF_STOCK') return `<span class="badge badge--danger">Out of Stock (${available})</span>`;
+      if (status === 'LOW_STOCK') return `<span class="badge badge--warning">Low Stock (${available})</span>`;
+      return `<span class="badge badge--success">In Stock (${available})</span>`;
     }
 
     function loadInventory() {
@@ -181,7 +206,9 @@
     /* ── Add / Edit Medicine Modal ── */
     function showMedModal(med = null) {
       const isEdit = !!med;
-      const unitSizeOpts = UNIT_SIZE_OPTIONS.map(o =>
+      // keep a custom/legacy size selectable so editing never silently drops it
+      const sizeList = med?.unitSize && !UNIT_SIZE_OPTIONS.includes(med.unitSize) ? [med.unitSize, ...UNIT_SIZE_OPTIONS] : UNIT_SIZE_OPTIONS;
+      const unitSizeOpts = sizeList.map(o =>
         `<option value="${o}" ${med?.unitSize === o ? 'selected' : ''}>${o}</option>`).join('');
       const formOpts = DOSAGE_FORM_OPTIONS.map(o =>
         `<option value="${o}" ${(med?.form === o) ? 'selected' : ''}>${o}</option>`).join('');
@@ -233,10 +260,11 @@
           </div>
           <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
             <div class="form-group">
-              <label class="form-group__label">Unit Size</label>
+              <label class="form-group__label">Unit Size *</label>
               <select class="form-input" name="unitSize">
                 <option value="">Select unit size…</option>${unitSizeOpts}
               </select>
+              <div class="field-error" aria-live="polite"></div>
             </div>
             <div class="form-group">
               <label class="form-group__label">Unit Price (₹) *</label>
@@ -276,6 +304,7 @@
           else if (n === 'category') setFE(f, 'category', el.value ? '' : 'Category is required');
           else if (n === 'form') setFE(f, 'form', el.value ? '' : 'Dosage form is required');
           else if (n === 'strength') setFE(f, 'strength', el.value.trim() ? '' : 'Strength is required');
+          else if (n === 'unitSize') setFE(f, 'unitSize', el.value ? '' : 'Unit size is required');
           else if (n === 'unitPrice') setFE(f, 'unitPrice', parseFloat(el.value) > 0 ? '' : 'Price must be greater than 0');
           else if (n === 'reorderLevel') setFE(f, 'reorderLevel', parseInt(el.value) > 0 ? '' : 'Reorder level must be > 0');
           else if (n === 'maxStock') {
@@ -317,25 +346,59 @@
       });
     }
 
-    /* ── Restock Modal (Task 4) ── */
+    /* ── Restock Modal ── */
     function showRestockModal(med) {
       const today = new Date().toISOString().split('T')[0];
-      const vbStock = (med.batches || []).filter(b => b.quantity > 0 && b.expiryDate >= today)
-        .reduce((s, b) => s + b.quantity, 0);
+      const st = pharmacy.getStockStatus(med);              // valid (non-expired) stock only
+      const vbStock = st.available;
       const expiredCount = (med.batches || []).filter(b => b.expiryDate < today && b.quantity > 0).length;
-      const canAdd = med.maxStock ? med.maxStock - vbStock : null;
+      const canAdd = med.maxStock ? Math.max(0, med.maxStock - vbStock) : null;
 
-      const suppliers = pharmacy.listSuppliers();
-      const supOptions = suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-      const pos = pharmacy.listPurchases().filter(p => p.status === 'ORDERED' || p.status === 'PARTIALLY_RECEIVED');
-      const poOptions = pos.map(p => `<option value="${p.id}">${p.id.split('-').pop().toUpperCase()} — ${db.getById('suppliers', p.supplierId).name}</option>`).join('');
+      const supName = id => { try { return db.getById('suppliers', id).name; } catch { return '—'; } };
+      const NO_PO_SUPPLIER = '— None (manual restock) —';
+
+      // Suppliers that have a configured rate for this medicine → makes the PO workflow easy to reach
+      const rated = pharmacy.listSuppliers()
+        .map(s => ({ name: s.name, rate: pharmacy.getSupplierRate(s.id, med.id) }))
+        .filter(x => x.rate);
+
+      // Open POs that still expect this medicine
+      const openPos = pharmacy.listPurchases()
+        .filter(p => p.status === 'ORDERED' || p.status === 'PARTIALLY_RECEIVED')
+        .map(p => {
+          const it = (p.items || []).find(i => i.medicineId === med.id);
+          return it ? { p, pending: (it.quantityOrdered || 0) - (it.quantityReceived || 0) } : null;
+        })
+        .filter(x => x && x.pending > 0);
+      const poOptions = openPos.map(({ p, pending }) =>
+        `<option value="${p.id}" data-supplier="${p.supplierId}" data-pending="${pending}">${p.id.split('-').pop().toUpperCase()} — ${supName(p.supplierId)} (pending ${pending})</option>`).join('');
+
+      const statusBadge = st.status === 'OUT_OF_STOCK' ? '<span class="badge badge--danger">Out of Stock</span>'
+        : st.status === 'LOW_STOCK' ? '<span class="badge badge--warning">Low Stock</span>'
+        : '<span class="badge badge--success">In Stock</span>';
+
+      const purchaseHint = rated.length
+        ? `<div class="text-body-sm">Buying from a supplier? Create a Purchase Order — the supplier's configured rate is applied automatically.<br>
+             <span class="text-caption">${rated.map(r => `${r.name} (${Format.money(r.rate)}/unit)`).join(' · ')}</span></div>
+           <a href="purchases.html?medId=${med.id}" class="btn btn--primary btn--sm">Create PO</a>`
+        : `<div class="text-body-sm">No supplier has a configured purchase rate for this medicine yet.
+             <a href="suppliers.html" class="text-link">Configure supplier rates</a> to purchase it through a Purchase Order.</div>`;
 
       const content = `
         ${expiredCount > 0 ? `<div class="expired-purge-banner">⚠ This medicine has ${expiredCount} expired batch(es) with remaining units. They will be automatically removed when you restock.</div>` : ''}
-        <div style="margin-bottom: var(--sp-4);">
-          <strong>${med.name}</strong> (${med.genericName})<br>
-          <span class="text-caption">Current valid stock: ${vbStock}${med.maxStock ? ` / Max: ${med.maxStock} (can add: ${Math.max(0, canAdd)})` : ''}</span>
+        ${st.status === 'OUT_OF_STOCK' ? `<div class="po-notice"><strong>Out of Stock</strong> — Purchase stock to replenish inventory.</div>` : ''}
+        <div style="margin-bottom: var(--sp-3);">
+          <strong>${med.name}</strong> <span class="text-caption">(${med.genericName})${med.unitSize ? ' · ' + med.unitSize : ''}</span>
         </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:var(--sp-3); margin-bottom:var(--sp-4);">
+          <div><div class="text-caption">Current Valid Stock</div><div><strong>${vbStock}</strong> ${statusBadge}</div></div>
+          <div><div class="text-caption">Reorder Level</div><div><strong>${med.reorderLevel}</strong></div></div>
+          ${med.maxStock ? `<div><div class="text-caption">Maximum Stock</div><div><strong>${med.maxStock}</strong> <span class="text-caption">(can add ${canAdd})</span></div></div>` : ''}
+        </div>
+        <div style="background:var(--bg-muted); padding:var(--sp-3); border-radius:var(--radius-md); margin-bottom:var(--sp-4); display:flex; justify-content:space-between; align-items:center; gap:var(--sp-3); flex-wrap:wrap;">
+          ${purchaseHint}
+        </div>
+        ${canAdd === 0 ? `<div class="po-notice">Maximum stock reached — no more units can be added to this medicine.</div>` : ''}
         <form id="restock-form" novalidate style="display:flex;flex-direction:column;gap:var(--sp-4);">
           <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
             <div class="form-group">
@@ -352,33 +415,55 @@
           <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
             <div class="form-group">
               <label class="form-group__label">Quantity *</label>
-              <input type="number" class="form-input" name="quantity" min="1" ${canAdd !== null ? `max="${canAdd}"` : ''} placeholder="Units to add">
+              <input type="number" class="form-input" name="quantity" min="1" step="1" ${canAdd !== null ? `max="${canAdd}"` : ''} placeholder="Units to add">
               <div class="field-error" aria-live="polite"></div>
             </div>
             <div class="form-group">
-              <label class="form-group__label">Supplier (optional)</label>
-              <select class="form-input" name="supplierId">
-                <option value="">— None —</option>${supOptions}
+              <label class="form-group__label">Purchase Order</label>
+              <select class="form-input" name="poId">
+                <option value="">— None (manual restock) —</option>${poOptions}
               </select>
             </div>
           </div>
           <div class="form-group">
-            <label class="form-group__label">Link to PO (optional)</label>
-            <select class="form-input" name="poId">
-              <option value="">— None —</option>${poOptions}
-            </select>
+            <label class="form-group__label">Supplier</label>
+            <input type="text" class="form-input" id="rs-supplier" value="${NO_PO_SUPPLIER}" readonly tabindex="-1" style="background:var(--bg-muted);">
+            <div class="text-caption" style="margin-top:4px;">Taken from the selected Purchase Order. Stock bought from a supplier is received against a PO; leave the PO empty only for a manual restock (e.g. return or correction).</div>
           </div>
         </form>
       `;
 
       const actions = `
         <button class="btn btn--secondary" id="rs-cancel">Cancel</button>
-        <button class="btn btn--primary" id="rs-submit">Receive Stock</button>
+        <button class="btn btn--primary" id="rs-submit" ${canAdd === 0 ? 'disabled' : ''}>Receive Stock</button>
         <button class="btn btn--secondary btn-print no-print" id="rs-print" style="display:none;">🖨 Print Receipt</button>
       `;
 
       const m = Modal.show({ title: `Restock — ${med.name}`, content, size: 'md', actions });
       const f = document.getElementById('restock-form');
+
+      // Pending quantity of the selected PO (null when no PO is selected)
+      const pendingOnPo = () => {
+        const opt = f.poId.options[f.poId.selectedIndex];
+        return opt && opt.value ? Number(opt.dataset.pending) : null;
+      };
+      const qtyError = (q) => {
+        if (!Number.isInteger(q) || q <= 0) return 'Quantity must be a whole number greater than 0';
+        const pend = pendingOnPo();
+        if (pend !== null && q > pend) return `Only ${pend} units are still pending on this PO`;
+        if (canAdd !== null && q > canAdd) return `Cannot exceed max limit. Can add at most ${canAdd} units.`;
+        return '';
+      };
+      const readQty = () => (f.quantity.value.trim() === '' ? NaN : Number(f.quantity.value));
+
+      f.poId.addEventListener('change', () => {
+        const opt = f.poId.options[f.poId.selectedIndex];
+        document.getElementById('rs-supplier').value = opt && opt.value ? supName(opt.dataset.supplier) : NO_PO_SUPPLIER;
+        const pend = pendingOnPo();
+        const limit = [pend, canAdd].filter(v => v !== null);
+        if (limit.length) f.quantity.max = Math.min(...limit); else f.quantity.removeAttribute('max');
+        if (f.quantity.value) setFE(f, 'quantity', qtyError(readQty()));
+      });
 
       /* Blur validation */
       f.querySelectorAll('input').forEach(el => {
@@ -389,22 +474,16 @@
             else if (el.value <= today) setFE(f, 'expiryDate', 'Expiry date must be in the future');
             else setFE(f, 'expiryDate', '');
           }
-          if (el.name === 'quantity') {
-            const q = parseInt(el.value);
-            if (!q || q <= 0) { setFE(f, 'quantity', 'Quantity must be > 0'); }
-            else if (canAdd !== null && q > canAdd) { setFE(f, 'quantity', `Cannot exceed max limit. Can add at most ${canAdd} units.`); }
-            else setFE(f, 'quantity', '');
-          }
+          if (el.name === 'quantity') setFE(f, 'quantity', qtyError(readQty()));
         });
       });
 
       document.getElementById('rs-cancel').addEventListener('click', m.close);
       document.getElementById('rs-submit').addEventListener('click', () => {
-        // Validate
         let ok = true;
         const batchNo = f.batchNo.value.trim();
         const expiryDate = f.expiryDate.value;
-        const qty = parseInt(f.quantity.value);
+        const qty = readQty();
 
         if (!batchNo) { setFE(f, 'batchNo', 'Batch number is required'); ok = false; }
         else setFE(f, 'batchNo', '');
@@ -413,9 +492,9 @@
         else if (expiryDate <= today) { setFE(f, 'expiryDate', 'Expiry date must be in the future'); ok = false; }
         else setFE(f, 'expiryDate', '');
 
-        if (!qty || qty <= 0) { setFE(f, 'quantity', 'Quantity must be > 0'); ok = false; }
-        else if (canAdd !== null && qty > canAdd) { setFE(f, 'quantity', `Cannot exceed max limit. Can add at most ${canAdd}.`); ok = false; }
-        else setFE(f, 'quantity', '');
+        const qErr = qtyError(qty);
+        setFE(f, 'quantity', qErr);
+        if (qErr) ok = false;
 
         if (!ok) {
           const first = f.querySelector('.form-group.has-error input');
@@ -424,13 +503,14 @@
         }
 
         try {
+          const poId = f.poId.value || null;
+          const poOpt = f.poId.options[f.poId.selectedIndex];
           const result = pharmacy.restockMedicine({
             medicineId: med.id,
             quantity: qty,
             batchNo,
             expiryDate,
-            supplierId: f.supplierId.value || null,
-            poId: f.poId.value || null,
+            poId,
             performedBy: currentUser.staffId
           });
 
@@ -447,8 +527,8 @@
             printBtn.onclick = () => printStockReceipt({
               medicine: med,
               qty, batchNo, expiryDate,
-              supplierId: f.supplierId.value,
-              poId: f.poId.value,
+              supplierId: poOpt && poOpt.value ? poOpt.dataset.supplier : '',
+              poId: poId || '',
               performedBy: currentUser.staffName
             });
           }
@@ -457,6 +537,12 @@
           // Disable submit to prevent double-submit
           document.getElementById('rs-submit').disabled = true;
         } catch (err) {
+          if (err.code === 'MEDICINE_NOT_FOUND') {
+            m.close();
+            Toast.show(err.message, 'error');
+            setTimeout(() => { window.location.href = 'purchases.html?notice=medicine-not-found'; }, 1500);
+            return;
+          }
           Toast.show(err.message, 'error');
         }
       });
@@ -493,5 +579,6 @@
       window.print();
     }
   </script>
+  <script type="module" src="./pharmacy-shell.js"></script>
 </body>
 </html>

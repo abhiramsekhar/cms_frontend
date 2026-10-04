@@ -77,8 +77,9 @@
 .payment-balance-display.positive { color: var(--success); }
 .payment-balance-display.negative { color: var(--danger); }
 
-/* ─── Restock Info Banner ───────────────────────── */
-.expired-purge-banner {
+/* ─── Restock / PO Info Banner ──────────────────── */
+.expired-purge-banner,
+.po-notice {
   background: var(--warning-light);
   color: var(--warning-dark);
   border: 1px solid var(--warning-dark);

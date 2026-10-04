@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="../../assets/css/tables.css">
   <link rel="stylesheet" href="../../assets/css/utilities.css">
   <link rel="stylesheet" href="../../assets/css/responsive.css">
+  <link rel="stylesheet" href="./pharmacy-chrome.css">
 </head>
 <body>
   <div class="app" id="app"></div>
@@ -22,10 +23,15 @@
     import { db } from '../../data/db.js';
     import { DataTable, Format } from '../../components/ui.js';
     import { reports } from '../../api/reports.js';
+    import { pharmacy } from '../../api/pharmacy.js';
 
     initShell(['PHARMACIST'], (session) => {
       const page = getPageContent();
       const stats = reports.getPharmacyStats();
+      // Low / out-of-stock use valid (non-expired) stock vs reorder level — same rule as Inventory & Stock Alerts
+      const lowStock = pharmacy.getStockAlerts()
+        .filter(a => a.type === 'LOW_STOCK' || a.type === 'OUT_OF_STOCK')
+        .sort((a, b) => a.stockLevel - b.stockLevel);
 
       page.innerHTML = `
         <div class="page-header">
@@ -43,7 +49,7 @@
           </div>
           <div class="stat-card">
             <div class="stat-card__icon" style="background:var(--danger-light);color:var(--danger);"><svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-alert-triangle"></use></svg></div>
-            <div class="stat-card__value">${stats.lowStockCount}</div>
+            <div class="stat-card__value">${lowStock.length}</div>
             <div class="stat-card__label">Low Stock Items</div>
           </div>
           <div class="stat-card">
@@ -72,17 +78,22 @@
                 <span class="text-card-title">Low Stock Alerts</span>
               </div>
               <div class="card__body" style="padding-top:0;">
-                ${stats.lowStockList.length === 0 ? '<div class="text-caption">No low stock items.</div>' : ''}
-                ${stats.lowStockList.slice(0, 5).map(m => `
+                ${lowStock.length === 0 ? '<div class="text-caption">No low stock items.</div>' : ''}
+                ${lowStock.slice(0, 5).map(m => `
                   <div style="border-bottom:1px solid var(--border); padding:var(--sp-2) 0;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
                       <strong>${m.name}</strong>
-                      <span style="color:var(--danger);font-weight:600;">${m.stockLevel} left</span>
+                      ${m.type === 'OUT_OF_STOCK'
+                        ? '<span style="color:var(--danger);font-weight:700;">OUT OF STOCK</span>'
+                        : `<span style="color:var(--warning-dark);font-weight:600;">${m.stockLevel} left</span>`}
                     </div>
-                    <div class="text-body-sm">Reorder at ${m.reorderLevel}</div>
+                    <div class="text-body-sm" style="display:flex; justify-content:space-between; align-items:center; gap:var(--sp-2);">
+                      <span>Reorder at ${m.reorderLevel}</span>
+                      <a href="inventory.html?restock=${m.id}" class="btn btn--secondary btn--sm">Restock</a>
+                    </div>
                   </div>
                 `).join('')}
-                ${stats.lowStockList.length > 5 ? `<div style="margin-top:var(--sp-2);"><a href="stock-alerts.html" class="text-link text-body-sm">View all alerts</a></div>` : ''}
+                ${lowStock.length > 5 ? `<div style="margin-top:var(--sp-2);"><a href="stock-alerts.html" class="text-link text-body-sm">View all alerts</a></div>` : ''}
               </div>
             </div>
           </div>
@@ -100,5 +111,6 @@
       new DataTable('queue-table', columns, stats.pendingRxList, { defaultSort: 'createdAt' });
     });
   </script>
+  <script type="module" src="./pharmacy-shell.js"></script>
 </body>
 </html>

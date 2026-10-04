@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="../../assets/css/utilities.css">
   <link rel="stylesheet" href="../../assets/css/responsive.css">
   <link rel="stylesheet" href="./pharmacy.css">
+  <link rel="stylesheet" href="./pharmacy-chrome.css">
 </head>
 <body>
   <div id="ph-print-frame"></div>
@@ -103,6 +104,9 @@
       histTable.updateData(history);
     }
 
+    /* Escape user-typed text before putting it into HTML */
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
     /* ── Print: Dispensing Receipt (from history row) ── */
     function printReceipt(rxId) {
       let rx;
@@ -116,26 +120,40 @@
       const payInfo = rx.payment || {};
 
       let rows = '', total = 0;
-      for (const item of rx.items) {
-        let med = null;
-        try { med = db.getById('medicines', item.medicineId); } catch {}
-        const unitPrice = med ? (med.unitPrice || med.price || 0) : 0;
-        const lineTotal = unitPrice * item.quantity;
-        total += lineTotal;
+      // Prefer the prices saved at dispense time so a later price change never alters an issued receipt
+      const stored = Array.isArray(rx.dispenseItems) && rx.dispenseItems.length ? rx.dispenseItems : null;
+      const lines = stored
+        ? stored.map((d, idx) => ({
+            name: d.name, dosage: rx.items[idx]?.dosage || '',
+            quantity: d.quantity, unitPrice: d.unitPrice, lineTotal: d.lineTotal
+          }))
+        : rx.items.map(item => {
+            let med = null;
+            try { med = db.getById('medicines', item.medicineId); } catch {}
+            const unitPrice = med ? (med.unitPrice || med.price || 0) : 0;
+            return {
+              name: item.name || (med?.name) || item.medicineId, dosage: item.dosage || '',
+              quantity: item.quantity, unitPrice, lineTotal: unitPrice * item.quantity
+            };
+          });
+      for (const l of lines) {
+        total += l.lineTotal;
         rows += `<tr>
-          <td>${item.name || (med?.name) || item.medicineId}</td>
-          <td style="text-align:center;">${item.dosage || ''}</td>
-          <td style="text-align:center;">${item.quantity}</td>
-          <td style="text-align:right;">${Format.money(unitPrice)}</td>
-          <td style="text-align:right;">${Format.money(lineTotal)}</td>
+          <td>${l.name}</td>
+          <td style="text-align:center;">${l.dosage}</td>
+          <td style="text-align:center;">${l.quantity}</td>
+          <td style="text-align:right;">${Format.money(l.unitPrice)}</td>
+          <td style="text-align:right;">${Format.money(l.lineTotal)}</td>
         </tr>`;
       }
 
       const paySection = payInfo.status ? `
         <div class="print-payment-section">
           <strong>Payment:</strong> ${payInfo.status}
-          ${payInfo.method ? ` | Method: ${payInfo.method}` : ''}
-          ${payInfo.transactionRef ? ` | Ref: ${payInfo.transactionRef}` : ''}
+          ${payInfo.method ? ` | Method: ${esc(payInfo.method)}` : ''}
+          ${payInfo.transactionRef ? ` | Ref: ${esc(payInfo.transactionRef)}` : ''}
+          ${payInfo.insurer ? ` | Insurer: ${esc(payInfo.insurer)}` : ''}
+          ${payInfo.claimNo ? ` | Claim: ${esc(payInfo.claimNo)}` : ''}
           ${payInfo.amountReceived ? ` | Received: ₹${(payInfo.amountReceived / 100).toFixed(2)}` : ''}
           ${typeof payInfo.balance === 'number' ? ` | Change: ₹${Math.max(0, payInfo.balance / 100).toFixed(2)}` : ''}
         </div>
@@ -233,5 +251,6 @@
       window.print();
     }
   </script>
+  <script type="module" src="./pharmacy-shell.js"></script>
 </body>
 </html>

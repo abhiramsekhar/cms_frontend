@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="../../assets/css/utilities.css">
   <link rel="stylesheet" href="../../assets/css/responsive.css">
   <link rel="stylesheet" href="./pharmacy.css">
+  <link rel="stylesheet" href="./pharmacy-chrome.css">
 </head>
 <body>
   <div class="app" id="app"></div>
@@ -31,7 +32,7 @@
         <div class="page-header">
           <div class="page-header__info">
             <h1 class="text-page-title">Stock Alerts</h1>
-            <p class="text-caption">Low stock, expiring soon (90 days) and expired batches with remaining units.</p>
+            <p class="text-caption">Out of stock and low stock (valid, non-expired stock at or below the reorder level), expiring soon (90 days) and expired batches with remaining units.</p>
           </div>
         </div>
 
@@ -44,6 +45,7 @@
             <div class="form-group" style="margin:0;">
               <select class="form-input" id="alert-filter">
                 <option value="">All Alerts</option>
+                <option value="OUT_OF_STOCK">Out of Stock</option>
                 <option value="LOW_STOCK">Low Stock</option>
                 <option value="EXPIRY">Expiring Soon</option>
                 <option value="EXPIRED">Expired</option>
@@ -57,9 +59,12 @@
       const columns = [
         { key: 'name',    label: 'Medicine',   sortable: true,  render: r => `<strong>${r.name}</strong>` },
         { key: 'type',    label: 'Alert Type', sortable: true,  render: r => {
-          if (r.type === 'LOW_STOCK') {
-            return `<span style="color:var(--danger);font-weight:600;">Low Stock</span><br>
-              <span class="text-caption">Available: ${r.stockLevel} (Reorder: ${r.reorderLevel})</span>`;
+          if (r.type === 'OUT_OF_STOCK') {
+            return `<span style="color:var(--danger);font-weight:700;">OUT OF STOCK</span><br>
+              <span class="text-caption">Available: ${r.stockLevel} · Reorder Level: ${r.reorderLevel}</span>`;
+          } else if (r.type === 'LOW_STOCK') {
+            return `<span style="color:var(--warning-dark);font-weight:600;">LOW STOCK</span><br>
+              <span class="text-caption">Available: ${r.stockLevel} · Reorder Level: ${r.reorderLevel}</span>`;
           } else if (r.type === 'EXPIRED') {
             return `<span style="color:var(--danger);font-weight:700;">EXPIRED</span><br>
               <span class="text-caption">Batch ${r.batchNo}: ${r.batchQty} units expired ${Format.date(r.expiryDate)}</span>`;
@@ -70,17 +75,19 @@
           }
         }},
         { key: 'actions', label: '', width: '220px', render: r => {
-          const createPO = r.type === 'LOW_STOCK' || r.type === 'EXPIRED'
+          const needsStock = r.type === 'OUT_OF_STOCK' || r.type === 'LOW_STOCK' || r.type === 'EXPIRED';
+          const createPO = needsStock
             ? `<a href="purchases.html?medId=${r.id}" class="btn btn--primary btn--sm" style="margin-right:4px;">
                 <svg class="icon" aria-hidden="true"><use href="../../assets/icons/sprite.svg#icon-shopping-cart"></use></svg> Create PO
               </a>`
             : '';
-          const restock = `<a href="inventory.html" class="btn btn--secondary btn--sm">Restock</a>`;
+          // Opens that medicine's restock directly (Inventory verifies it exists first)
+          const restock = `<a href="inventory.html?restock=${r.id}" class="btn btn--secondary btn--sm">Restock</a>`;
           return createPO + restock;
         }}
       ];
 
-      alertsTable = new DataTable('alerts-table', columns, [], { searchInputId: 'alert-search', defaultSort: 'type' });
+      alertsTable = new DataTable('alerts-table', columns, [], { searchInputId: 'alert-search', defaultSort: 'severity' });
       alertsTable.sortAsc = true;
       loadAlerts();
 
@@ -94,5 +101,6 @@
       alertsTable.updateData(alerts);
     }
   </script>
+  <script type="module" src="./pharmacy-shell.js"></script>
 </body>
 </html>
