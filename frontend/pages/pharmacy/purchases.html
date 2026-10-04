@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="../../assets/css/utilities.css">
   <link rel="stylesheet" href="../../assets/css/responsive.css">
   <link rel="stylesheet" href="./pharmacy.css">
+  <link rel="stylesheet" href="./pharmacy-chrome.css">
 </head>
 <body>
   <div id="ph-print-frame"></div>
@@ -27,7 +28,11 @@
 
     let poTable;
     let currentUser;
-    let newPoItems = [];  // { medicineId, name, quantityOrdered, unitCost, lineTotal }
+    let newPoItems = [];  // { medicineId, name, quantityOrdered, unitCost, lineTotal } (unitCost = supplier's configured rate)
+
+    const MED_NOT_FOUND_MSG = 'Medicine not found in inventory. Please add/configure the medicine before purchasing stock.';
+    const NO_RATES_MSG = 'No supplier rates configured. Please configure medicine rates for this supplier before creating a Purchase Order.';
+    const NO_MED_RATE_MSG = 'No purchase rate configured for this medicine from this supplier. Configure the supplier rate first.';
 
     /* ── Inline validation helpers ── */
     function setFE(elOrId, msg) {
@@ -107,10 +112,19 @@
         if (printBtn) return printPO(printBtn.dataset.id);
       });
 
-      // Handle stock alert prefill
+      // Handle redirects from Stock Alerts / Inventory (?medId=…) and "medicine not found" notices
       const params = new URLSearchParams(window.location.search);
       const prefillMed = params.get('medId');
-      if (prefillMed) showCreatePO(prefillMed);
+      const notice = params.get('notice');
+      if (notice === 'medicine-not-found') {
+        Toast.show(MED_NOT_FOUND_MSG, 'error');
+      } else if (prefillMed) {
+        const med = pharmacy.listMedicines().find(m => m.id === prefillMed);
+        if (!med) Toast.show(MED_NOT_FOUND_MSG, 'error');
+        else if (!med.isActive) Toast.show(`${med.name} is inactive. Activate it in Inventory before purchasing stock.`, 'error');
+        else showCreatePO(prefillMed);
+      }
+      if (notice || prefillMed) window.history.replaceState({}, document.title, window.location.pathname);
     });
 
     function loadPOs() {
@@ -175,6 +189,8 @@
           <div class="field-error" id="po-supplier-error" aria-live="polite"></div>
         </div>
 
+        <div class="po-notice" id="po-notice" role="status" aria-live="polite" style="display:none;"></div>
+
         <div class="form-group" style="margin-bottom:var(--sp-3);">
           <label class="form-group__label">Order Date</label>
           <input type="date" class="form-input" id="po-date" value="${todayStr}">
@@ -197,7 +213,7 @@
             </div>
             <div class="form-group" style="margin:0;">
               <label class="form-group__label">Rate/Unit (₹)</label>
-              <input type="number" class="form-input" id="po-price" min="0.01" step="0.01" placeholder="Auto-fills" readonly style="background:var(--bg-muted);">
+              <input type="text" class="form-input" id="po-price" placeholder="Auto-filled" readonly tabindex="-1" aria-readonly="true" title="Set in Suppliers → Rates" style="background:var(--bg-muted);">
               <div class="field-error" id="po-price-error" aria-live="polite"></div>
             </div>
             <button class="btn btn--secondary" type="button" id="po-add-item">Add</button>
@@ -220,125 +236,123 @@
       const m = Modal.show({ title: 'Create Purchase Order', content, size: 'lg', actions });
       renderItems();
 
-      /* Supplier change → populate medicines from supplier rates */
-      document.getElementById('po-supplier').addEventListener('change', () => {
-        const supId = document.getElementById('po-supplier').value;
-        setFE(document.getElementById('po-supplier'), supId ? '' : 'Supplier is required');
-        const medSel = document.getElementById('po-med');
-        const priceEl = document.getElementById('po-price');
+      const supEl = document.getElementById('po-supplier');
+      const medEl = document.getElementById('po-med');
+      const priceEl = document.getElementById('po-price');
+      const noticeEl = document.getElementById('po-notice');
+      const RATES_LINK = ' <a href="suppliers.html" class="text-link">Configure supplier rates</a>';
 
+      function showNotice(msg, withLink = false) {
+        noticeEl.innerHTML = msg ? msg + (withLink ? RATES_LINK : '') : '';
+        noticeEl.style.display = msg ? '' : 'none';
+        noticeEl.style.marginBottom = msg ? 'var(--sp-3)' : '';
+      }
+
+      /* Medicines offered = ONLY those with a configured rate for the selected supplier */
+      function loadSupplierMedicines(supId) {
+        priceEl.value = '';
+        showNotice('');
         if (!supId) {
-          medSel.innerHTML = '<option value="">Select supplier first…</option>';
-          priceEl.value = '';
-          if (newPoItems.length > 0) {
-            if (!confirm('Changing supplier will reset the item list. Continue?')) {
-              document.getElementById('po-supplier').value = '';
-              return;
-            }
-            newPoItems = [];
-            renderItems();
-          }
+          medEl.disabled = false;
+          medEl.innerHTML = '<option value="">Select supplier first…</option>';
           return;
         }
-
-        // Confirm reset if items already added
-        if (newPoItems.length > 0) {
-          const prevSup = newPoItems[0]?.supplierId;
-          if (prevSup && prevSup !== supId) {
-            if (!confirm('Changing supplier will reset the item list. Continue?')) {
-              document.getElementById('po-supplier').value = prevSup;
-              return;
-            }
-            newPoItems = [];
-            renderItems();
-          }
-        }
-
-        // Get supplier rates
-        const rates = pharmacy.getSupplierRates(supId);
+        const rates = pharmacy.getSupplierRates(supId)
+          .filter(r => r.isActive)
+          .sort((x, y) => x.medicineName.localeCompare(y.medicineName));
         if (rates.length === 0) {
-          // Fallback: show all active medicines (user must type price)
-          const meds = pharmacy.listMedicines().filter(m => m.isActive);
-          medSel.innerHTML = '<option value="">Select medicine…</option>' +
-            meds.map(m => `<option value="${m.id}" data-rate="">${m.name}</option>`).join('');
-          priceEl.removeAttribute('readonly');
-          priceEl.style.background = '';
-          priceEl.placeholder = 'Enter price';
-        } else {
-          medSel.innerHTML = '<option value="">Select medicine…</option>' +
-            rates.map(r => `<option value="${r.medicineId}" data-rate="${r.rate}">${r.medicineName}</option>`).join('');
-          priceEl.setAttribute('readonly', '');
-          priceEl.style.background = 'var(--bg-muted)';
-          priceEl.placeholder = 'Auto-fills';
-          priceEl.value = '';
+          medEl.disabled = true;
+          medEl.innerHTML = '<option value="">No rates configured</option>';
+          showNotice(NO_RATES_MSG, true);
+          return;
         }
+        medEl.disabled = false;
+        const sizeOf = Object.fromEntries(pharmacy.listMedicines().map(x => [x.id, x.unitSize]));
+        medEl.innerHTML = '<option value="">Select medicine…</option>' +
+          rates.map(r => `<option value="${r.medicineId}">${r.medicineName}${sizeOf[r.medicineId] ? ' — ' + sizeOf[r.medicineId] : ''}</option>`).join('');
+      }
+
+      /* Supplier change → reload that supplier's rated medicines */
+      supEl.addEventListener('change', () => {
+        const supId = supEl.value;
+        setFE(supEl, supId ? '' : 'Supplier is required');
+
+        // Items already added belong to the previous supplier's rates
+        if (newPoItems.length > 0 && newPoItems[0].supplierId !== supId) {
+          if (!confirm('Changing supplier will reset the item list. Continue?')) {
+            supEl.value = newPoItems[0].supplierId;
+            setFE(supEl, '');
+            return;
+          }
+          newPoItems = [];
+          renderItems();
+        }
+
+        loadSupplierMedicines(supId);
       });
 
-      /* Medicine change → auto-fill rate */
-      document.getElementById('po-med').addEventListener('change', () => {
-        const sel = document.getElementById('po-med');
-        const selectedOpt = sel.options[sel.selectedIndex];
-        const rate = selectedOpt?.dataset?.rate;
-        const priceEl = document.getElementById('po-price');
-        if (rate) {
-          priceEl.value = (parseFloat(rate) / 100).toFixed(2);
-        } else if (!priceEl.hasAttribute('readonly')) {
-          priceEl.value = '';
-        }
-        setFE(document.getElementById('po-med'), sel.value ? '' : 'Select a medicine');
+      /* Medicine change → auto-fill the supplier's configured rate (read-only) */
+      medEl.addEventListener('change', () => {
+        const medId = medEl.value;
+        const rate = medId ? pharmacy.getSupplierRate(supEl.value, medId) : null;
+        priceEl.value = rate ? (rate / 100).toFixed(2) : '';
+        if (medId && !rate) showNotice(NO_MED_RATE_MSG, true);
+        else showNotice('');
+        setFE(medEl, medId ? '' : 'Select a medicine');
       });
 
-      /* Pre-fill if navigated from alerts */
+      /* Pre-fill when arriving from Stock Alerts / Inventory (?medId=…) */
       if (typeof prefillMedId === 'string') {
-        // Select first supplier that has this medicine in rates
-        const suppliers = pharmacy.listSuppliers();
-        const supWithRate = suppliers.find(s => (s.rates || []).some(r => r.medicineId === prefillMedId));
-        if (supWithRate) {
-          document.getElementById('po-supplier').value = supWithRate.id;
-          document.getElementById('po-supplier').dispatchEvent(new Event('change'));
-          setTimeout(() => {
-            const medSel = document.getElementById('po-med');
-            if (medSel) {
-              medSel.value = prefillMedId;
-              medSel.dispatchEvent(new Event('change'));
-            }
-          }, 50);
+        const preMed = pharmacy.listMedicines().find(x => x.id === prefillMedId);
+        const preName = preMed ? preMed.name : 'this medicine';
+        const offering = suppliers.filter(sp =>
+          pharmacy.getSupplierRates(sp.id).some(r => r.medicineId === prefillMedId && r.isActive));
+        if (offering.length === 1) {
+          supEl.value = offering[0].id;
+          loadSupplierMedicines(offering[0].id);
+          medEl.value = prefillMedId;
+          medEl.dispatchEvent(new Event('change'));
+        } else if (offering.length > 1) {
+          showNotice(`Select the supplier to buy ${preName} from. Each supplier has its own configured rate.`);
+        } else {
+          showNotice(`No supplier has a configured purchase rate for ${preName}. Configure the supplier rate first.`, true);
         }
       }
 
       document.getElementById('po-cancel').addEventListener('click', m.close);
 
-      /* Add item */
+      /* Add item — the rate is looked up from the supplier configuration, never read from the input */
       document.getElementById('po-add-item').addEventListener('click', () => {
-        const supId = document.getElementById('po-supplier').value;
-        const medId = document.getElementById('po-med').value;
-        const qtyStr = document.getElementById('po-qty').value;
-        const priceStr = document.getElementById('po-price').value;
+        const supId = supEl.value;
+        const medId = medEl.value;
+        const qtyStr = document.getElementById('po-qty').value.trim();
         let ok = true;
 
-        if (!supId) { setFE(document.getElementById('po-supplier'), 'Supplier is required'); ok = false; }
+        if (!supId) { setFE(supEl, 'Supplier is required'); ok = false; }
         if (!medId) { document.getElementById('po-med-error').textContent = 'Select a medicine'; ok = false; }
         else document.getElementById('po-med-error').textContent = '';
 
-        const qty = parseInt(qtyStr);
-        if (!qty || qty <= 0) { document.getElementById('po-qty-error').textContent = 'Qty must be > 0'; ok = false; }
-        else document.getElementById('po-qty-error').textContent = '';
+        const qty = Number(qtyStr);
+        if (!qtyStr || !Number.isInteger(qty) || qty <= 0) {
+          document.getElementById('po-qty-error').textContent = 'Quantity must be a whole number greater than 0';
+          ok = false;
+        } else document.getElementById('po-qty-error').textContent = '';
 
-        const price = parseFloat(priceStr);
-        if (!priceStr || isNaN(price) || price <= 0) { document.getElementById('po-price-error').textContent = 'Price must be > 0'; ok = false; }
-        else document.getElementById('po-price-error').textContent = '';
+        const unitCost = (supId && medId) ? pharmacy.getSupplierRate(supId, medId) : null;
+        if (supId && medId && !unitCost) {
+          document.getElementById('po-price-error').textContent = NO_MED_RATE_MSG;
+          ok = false;
+        } else document.getElementById('po-price-error').textContent = '';
 
         if (!ok) return;
 
-        const meds = pharmacy.listMedicines();
-        const med = meds.find(m => m.id === medId);
-        if (!med) return;
+        const med = pharmacy.listMedicines().find(x => x.id === medId);
+        if (!med) { Toast.show(MED_NOT_FOUND_MSG, 'error'); return; }
 
-        const unitCost = Math.round(price * 100);
         const existing = newPoItems.findIndex(i => i.medicineId === medId);
         if (existing >= 0) {
-          // Update existing item
           newPoItems[existing].quantityOrdered += qty;
+          newPoItems[existing].unitCost = unitCost;
           newPoItems[existing].lineTotal = newPoItems[existing].quantityOrdered * unitCost;
         } else {
           newPoItems.push({
@@ -351,20 +365,21 @@
           });
         }
         renderItems();
-        document.getElementById('po-med').value = '';
+        medEl.value = '';
         document.getElementById('po-qty').value = '10';
-        document.getElementById('po-price').value = '';
+        priceEl.value = '';
+        showNotice('');
         document.getElementById('po-items-error').textContent = '';
       });
 
-      /* Submit PO */
+      /* Submit PO — only medicine + quantity are sent; the API applies the supplier's configured rate */
       document.getElementById('po-submit').addEventListener('click', () => {
-        const supplierId = document.getElementById('po-supplier').value;
+        const supplierId = supEl.value;
         const orderDate = document.getElementById('po-date').value;
         let ok = true;
 
         if (!supplierId) {
-          setFE(document.getElementById('po-supplier'), 'Supplier is required');
+          setFE(supEl, 'Supplier is required');
           ok = false;
         }
         if (newPoItems.length === 0) {
@@ -374,9 +389,9 @@
         if (!ok) return;
 
         try {
-          const po = pharmacy.createPurchaseOrder({
+          pharmacy.createPurchaseOrder({
             supplierId,
-            items: newPoItems,
+            items: newPoItems.map(i => ({ medicineId: i.medicineId, quantityOrdered: i.quantityOrdered })),
             orderDate: orderDate || new Date().toISOString().split('T')[0]
           }, currentUser.staffId);
 
@@ -385,6 +400,7 @@
           loadPOs();
           window.history.replaceState({}, document.title, window.location.pathname);
         } catch (err) {
+          if (err.code === 'RATE_NOT_CONFIGURED') showNotice(err.message, true);
           Toast.show(err.message, 'error');
         }
       });
@@ -484,7 +500,10 @@
               </div>
             </td>
             <td style="padding:var(--sp-2); border-top:1px solid var(--border);">
-              <input type="text" class="form-input" name="batch_${i}" ${pendingQty === 0 ? 'disabled' : ''} placeholder="Auto">
+              <div class="form-group" style="margin:0;">
+                <input type="text" class="form-input" name="batch_${i}" ${pendingQty === 0 ? 'disabled' : ''} placeholder="e.g. B2026X01" autocomplete="off">
+                <div class="field-error" id="recv-batch-err-${i}" aria-live="polite"></div>
+              </div>
             </td>
           </tr>
         `;
@@ -503,7 +522,7 @@
                   <th>Medicine</th>
                   <th style="width:110px;">Receive Qty</th>
                   <th style="width:160px;">Expiry Date</th>
-                  <th style="width:130px;">Batch No</th>
+                  <th style="width:130px;">Batch No *</th>
                 </tr>
               </thead>
               <tbody>${rows}</tbody>
@@ -536,24 +555,30 @@
           const expEl = f[`exp_${i}`];
           if (!qty || qty <= 0) return; // skip 0 qty
 
-          if (!expEl.value) {
-            document.getElementById(`recv-exp-err-${i}`).textContent = 'Expiry date required';
-            expEl.closest?.('.form-group')?.classList.add('has-error');
-            ok = false;
-          } else if (expEl.value <= today) {
-            document.getElementById(`recv-exp-err-${i}`).textContent = 'Expiry must be in the future';
-            expEl.closest?.('.form-group')?.classList.add('has-error');
-            ok = false;
-          } else {
-            document.getElementById(`recv-exp-err-${i}`).textContent = '';
-            expEl.closest?.('.form-group')?.classList.remove('has-error');
-            receivedItems.push({
-              medicineId: f[`medId_${i}`].value,
-              quantity: qty,
-              expiryDate: expEl.value,
-              batchNumber: f[`batch_${i}`].value || null
-            });
-          }
+          const batchEl = f[`batch_${i}`];
+          const pending = (po.items[i].quantityOrdered || 0) - (po.items[i].quantityReceived || 0);
+          let lineOk = true;
+          const mark = (errId, el, msg) => {
+            document.getElementById(errId).textContent = msg;
+            el.closest?.('.form-group')?.classList.toggle('has-error', !!msg);
+            if (msg) lineOk = false;
+          };
+
+          mark(`recv-qty-err-${i}`, qtyEl,
+            String(qtyEl.value).trim() !== String(qty) ? 'Enter a whole number'
+              : qty > pending ? `Only ${pending} pending` : '');
+          mark(`recv-exp-err-${i}`, expEl,
+            !expEl.value ? 'Expiry date required'
+              : expEl.value <= today ? 'Expiry must be in the future' : '');
+          mark(`recv-batch-err-${i}`, batchEl, batchEl.value.trim() ? '' : 'Batch number required');
+
+          if (!lineOk) { ok = false; return; }
+          receivedItems.push({
+            medicineId: f[`medId_${i}`].value,
+            quantity: qty,
+            expiryDate: expEl.value,
+            batchNumber: batchEl.value.trim()
+          });
         });
 
         if (!ok) return;
@@ -658,5 +683,6 @@
       window.print();
     }
   </script>
+  <script type="module" src="./pharmacy-shell.js"></script>
 </body>
 </html>
