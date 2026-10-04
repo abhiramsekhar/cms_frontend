@@ -111,53 +111,66 @@
         align-items: flex-end;
     }
 
-    body:not(.role-doctor) .hamburger {
+    body:not(.role-doctor):not(.role-admin) .hamburger {
         display: none;
     }
 
-    body.role-doctor.is-sidebar-collapsed .sidebar {
+    body.role-doctor.is-sidebar-collapsed .sidebar,
+    body.role-admin.is-sidebar-collapsed .sidebar {
         width: 72px;
     }
 
-    body.role-doctor.is-sidebar-collapsed .header {
+    body.role-doctor.is-sidebar-collapsed .header,
+    body.role-admin.is-sidebar-collapsed .header {
         left: 72px;
     }
 
-    body.role-doctor.is-sidebar-collapsed .main {
+    body.role-doctor.is-sidebar-collapsed .main,
+    body.role-admin.is-sidebar-collapsed .main {
         margin-left: 72px;
     }
 
     body.role-doctor.is-sidebar-collapsed .sidebar__brand-text,
     body.role-doctor.is-sidebar-collapsed .nav-group__label,
     body.role-doctor.is-sidebar-collapsed .nav-item span,
-    body.role-doctor.is-sidebar-collapsed .sidebar__footer span {
+    body.role-doctor.is-sidebar-collapsed .sidebar__footer span,
+    body.role-admin.is-sidebar-collapsed .sidebar__brand-text,
+    body.role-admin.is-sidebar-collapsed .nav-group__label,
+    body.role-admin.is-sidebar-collapsed .nav-item span,
+    body.role-admin.is-sidebar-collapsed .sidebar__footer span {
         display: none;
     }
 
-    body.role-doctor.is-sidebar-collapsed .nav-item {
+    body.role-doctor.is-sidebar-collapsed .nav-item,
+    body.role-admin.is-sidebar-collapsed .nav-item {
         justify-content: center;
         padding-left: 0;
         padding-right: 0;
     }
 
-    body.role-doctor.is-sidebar-collapsed .nav-item .icon {
+    body.role-doctor.is-sidebar-collapsed .nav-item .icon,
+    body.role-admin.is-sidebar-collapsed .nav-item .icon {
         margin-right: 0;
     }
 
-    body.role-doctor.is-sidebar-collapsed .sidebar__footer {
+    body.role-doctor.is-sidebar-collapsed .sidebar__footer,
+    body.role-admin.is-sidebar-collapsed .sidebar__footer {
         justify-content: center;
     }
 
-    body.role-doctor.is-sidebar-collapsed .sidebar__footer .icon {
+    body.role-doctor.is-sidebar-collapsed .sidebar__footer .icon,
+    body.role-admin.is-sidebar-collapsed .sidebar__footer .icon {
         margin-right: 0;
     }
 
-    body.role-doctor.is-sidebar-collapsed .sidebar__brand {
+    body.role-doctor.is-sidebar-collapsed .sidebar__brand,
+    body.role-admin.is-sidebar-collapsed .sidebar__brand {
         padding: var(--sp-4) 0;
         justify-content: center;
     }
 
-    body.role-doctor.is-sidebar-collapsed .sidebar__logo {
+    body.role-doctor.is-sidebar-collapsed .sidebar__logo,
+    body.role-admin.is-sidebar-collapsed .sidebar__logo {
         margin: 0;
     }
 

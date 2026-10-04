@@ -12,6 +12,9 @@ import { db } from '../data/db.js';
 import { auth } from '../api/auth.js';
 import { Format, Toast } from './ui.js';
 
+/** Roles that support the desktop sidebar collapse/expand toggle. */
+export const COLLAPSIBLE_ROLES = ['DOCTOR', 'ADMIN'];
+
 function icon(id, cls = '') {
   return `<svg class="icon${cls ? ' ' + cls : ''}" aria-hidden="true"><use href="${getBasePath()}assets/icons/sprite.svg#${id}"></use></svg>`;
 }
@@ -81,7 +84,7 @@ export function renderTopbar(container, session) {
       ${session.role === 'LAB_TECH' ? '' : `
         <div class="search-bar" id="global-search">
           <span class="search-bar__icon">${icon('icon-search', 'icon--sm')}</span>
-          <input type="text" class="search-bar__input" placeholder="Search patients, appointments…" aria-label="Search" id="search-input" autocomplete="off">
+          <input type="text" class="search-bar__input" placeholder="${session.role === 'ADMIN' ? 'Search staff, users, patients…' : 'Search patients, appointments…'}" aria-label="Search" id="search-input" autocomplete="off">
           <button id="search-clear" class="btn btn--ghost btn--icon" style="display:none; position: absolute; right: 40px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; min-height: 24px;" aria-label="Clear search">
             ${icon('icon-x', 'icon--sm')}
           </button>
@@ -212,10 +215,11 @@ function setupTopbarEvents(session, updateUnreadCount) {
   };
 
   toggleBtn?.addEventListener('click', () => {
-    if (window.innerWidth >= 1024 && session.role === 'DOCTOR') {
+    if (window.innerWidth >= 1024 && COLLAPSIBLE_ROLES.includes(session.role)) {
       document.body.classList.toggle('is-sidebar-collapsed');
       const isCollapsed = document.body.classList.contains('is-sidebar-collapsed');
-      localStorage.setItem('clinova.doctor.sidebarCollapsed', isCollapsed ? 'true' : 'false');
+      const storageKey = 'clinova.' + session.role.toLowerCase() + '.sidebarCollapsed';
+      localStorage.setItem(storageKey, isCollapsed ? 'true' : 'false');
       toggleBtn.setAttribute('aria-expanded', !isCollapsed);
       
       // Toggle tooltips on nav items
@@ -350,12 +354,194 @@ function setupTopbarEvents(session, updateUnreadCount) {
     if (window.innerWidth < 1024) closeMobileSidebar();
   });
 
-  if (session.role === 'DOCTOR') {
-    setupDoctorSearch(session);
+  // Activate search for roles that have a search config
+  const searchConfig = getSearchConfig(session);
+  if (searchConfig) {
+    setupSearch(session, searchConfig);
   }
 }
 
-function setupDoctorSearch(session) {
+/* ─── Role-specific search configs ─── */
+
+function getDoctorSearchGroups(session, query, base, escapeHtml) {
+  const allPatients = db.getAll('patients') || [];
+  const labCatalog = db.getAll('labCatalog') || [];
+  const getPat = (id) => allPatients.find(p => p.id === id) || { name: 'Unknown patient', mrn: '-' };
+  const getTest = (id) => labCatalog.find(t => t.id === id) || { name: 'Unknown test' };
+
+  const patients = allPatients.filter(p => 
+    (p.name?.toLowerCase() ?? '').includes(query) || 
+    (p.mrn?.toLowerCase() ?? '').includes(query) || 
+    (p.phone?.toLowerCase() ?? '').includes(query)
+  ).slice(0, 5);
+
+  const appointments = (db.getAll('appointments') || []).filter(a => {
+    if (a.doctorId !== session.staffId) return false;
+    const pat = getPat(a.patientId);
+    return (pat.name?.toLowerCase() ?? '').includes(query) || 
+           (pat.mrn?.toLowerCase() ?? '').includes(query) || 
+           (a.type?.toLowerCase() ?? '').includes(query) || 
+           (a.status?.toLowerCase() ?? '').includes(query) || 
+           (a.date ?? '').includes(query);
+  }).slice(0, 5);
+
+  const prescriptions = (db.getAll('prescriptions') || []).filter(p => {
+    if (p.doctorId !== session.staffId) return false;
+    const pat = getPat(p.patientId);
+    const rxItems = Array.isArray(p.items) ? p.items : [];
+    return (pat.name?.toLowerCase() ?? '').includes(query) || 
+           (p.status?.toLowerCase() ?? '').includes(query) || 
+           rxItems.some(m => (m.name?.toLowerCase() ?? '').includes(query));
+  }).slice(0, 5);
+
+  const labOrders = (db.getAll('labOrders') || []).filter(l => {
+    if (l.doctorId !== session.staffId) return false;
+    const pat = getPat(l.patientId);
+    const test = getTest(l.testId);
+    return (pat.name?.toLowerCase() ?? '').includes(query) || 
+           (test.name?.toLowerCase() ?? '').includes(query) || 
+           (l.status?.toLowerCase() ?? '').includes(query) || 
+           (l.priority?.toLowerCase() ?? '').includes(query);
+  }).slice(0, 5);
+
+  const groups = [];
+
+  if (patients.length) {
+    groups.push({ label: 'Patients', items: patients.map(p => ({
+      url: base + 'pages/shared/patient-profile.html?id=' + p.id,
+      primary: escapeHtml(p.name),
+      secondary: 'MRN: ' + escapeHtml(p.mrn),
+    }))});
+  }
+  if (appointments.length) {
+    groups.push({ label: 'Appointments', items: appointments.map(a => {
+      const pat = getPat(a.patientId);
+      return { url: base + 'pages/doctor/appointments.html',
+        primary: escapeHtml(a.date) + ' · ' + escapeHtml(a.time),
+        secondary: escapeHtml(pat.name) + ' · ' + escapeHtml(a.status) };
+    })});
+  }
+  if (prescriptions.length) {
+    groups.push({ label: 'Prescriptions', items: prescriptions.map(p => {
+      const pat = getPat(p.patientId);
+      const medItems = Array.isArray(p.items) ? p.items : [];
+      const meds = medItems.map(m => m.name).join(', ');
+      return { url: base + 'pages/doctor/prescriptions.html',
+        primary: escapeHtml(pat.name),
+        secondary: escapeHtml(meds) + ' · ' + escapeHtml(p.status) };
+    })});
+  }
+  if (labOrders.length) {
+    groups.push({ label: 'Lab Orders', items: labOrders.map(l => {
+      const pat = getPat(l.patientId);
+      const test = getTest(l.testId);
+      return { url: base + 'pages/doctor/lab-orders.html',
+        primary: escapeHtml(pat.name),
+        secondary: escapeHtml(test.name) + ' · ' + escapeHtml(l.priority) + ' · ' + escapeHtml(l.status) };
+    })});
+  }
+
+  return groups;
+}
+
+function getAdminSearchGroups(_session, query, base, escapeHtml) {
+  const allDepts = db.getAll('departments') || [];
+  const getDept = (id) => allDepts.find(d => d.id === id);
+
+  const staff = (db.getAll('staff') || []).filter(s =>
+    (s.name?.toLowerCase() ?? '').includes(query) ||
+    (s.role?.toLowerCase() ?? '').includes(query) ||
+    (s.designation?.toLowerCase() ?? '').includes(query)
+  ).slice(0, 5);
+
+  const users = (db.getAll('users') || []).filter(u =>
+    (u.username?.toLowerCase() ?? '').includes(query) ||
+    (u.role?.toLowerCase() ?? '').includes(query)
+  ).slice(0, 5);
+
+  const departments = allDepts.filter(d =>
+    (d.name?.toLowerCase() ?? '').includes(query)
+  ).slice(0, 5);
+
+  const labTests = (db.getAll('labCatalog') || []).filter(t =>
+    (t.name?.toLowerCase() ?? '').includes(query) ||
+    (t.code?.toLowerCase() ?? '').includes(query)
+  ).slice(0, 5);
+
+  const patients = (db.getAll('patients') || []).filter(p =>
+    (p.name?.toLowerCase() ?? '').includes(query) ||
+    (p.mrn?.toLowerCase() ?? '').includes(query) ||
+    (p.phone?.toLowerCase() ?? '').includes(query)
+  ).slice(0, 5);
+
+  const suppliers = (db.getAll('suppliers') || []).filter(s =>
+    (s.name?.toLowerCase() ?? '').includes(query)
+  ).slice(0, 5);
+
+  const groups = [];
+
+  if (staff.length) {
+    groups.push({ label: 'Staff', items: staff.map(s => {
+      const dept = s.departmentId ? getDept(s.departmentId) : null;
+      return { url: base + 'pages/admin/staff.html',
+        primary: escapeHtml(s.name),
+        secondary: escapeHtml(s.role + ' · ' + s.designation) + (dept ? ' · ' + escapeHtml(dept.name) : '') };
+    })});
+  }
+  if (users.length) {
+    groups.push({ label: 'Users', items: users.map(u => ({
+      url: base + 'pages/admin/users.html',
+      primary: escapeHtml(u.username),
+      secondary: escapeHtml(u.role),
+    }))});
+  }
+  if (departments.length) {
+    groups.push({ label: 'Departments', items: departments.map(d => ({
+      url: base + 'pages/admin/departments.html',
+      primary: escapeHtml(d.name),
+      secondary: '',
+    }))});
+  }
+  if (labTests.length) {
+    groups.push({ label: 'Lab Tests', items: labTests.map(t => ({
+      url: base + 'pages/admin/lab-catalog.html',
+      primary: escapeHtml(t.name),
+      secondary: escapeHtml(t.code),
+    }))});
+  }
+  if (patients.length) {
+    groups.push({ label: 'Patients', items: patients.map(p => ({
+      url: base + 'pages/shared/patient-profile.html?id=' + p.id,
+      primary: escapeHtml(p.name),
+      secondary: 'MRN: ' + escapeHtml(p.mrn) + (p.phone ? ' · ' + escapeHtml(p.phone) : ''),
+    }))});
+  }
+  if (suppliers.length) {
+    groups.push({ label: 'Suppliers', items: suppliers.map(s => ({
+      url: base + 'pages/admin/suppliers.html',
+      primary: escapeHtml(s.name),
+      secondary: '',
+    }))});
+  }
+
+  return groups;
+}
+
+/**
+ * Return the search config for the given session, or null if the role has no search.
+ * Structured so Reception/Pharmacy configs can be added later.
+ */
+function getSearchConfig(session) {
+  switch (session.role) {
+    case 'DOCTOR':  return { getGroups: getDoctorSearchGroups };
+    case 'ADMIN':   return { getGroups: getAdminSearchGroups };
+    default:        return null;
+  }
+}
+
+/* ─── Generic search setup (shared UX) ─── */
+
+function setupSearch(session, config) {
   const searchInput = document.getElementById('search-input');
   const searchClear = document.getElementById('search-clear');
   const searchDropdown = document.getElementById('search-dropdown');
@@ -364,11 +550,19 @@ function setupDoctorSearch(session) {
 
   const base = getBasePath();
   let selectedIndex = -1;
-  let items = [];
+  let flatItems = [];
 
   const closeSearch = () => {
     searchDropdown.classList.remove('is-open');
     selectedIndex = -1;
+  };
+
+  const escapeHtml = (str) => {
+    if (str == null) return '';
+    return String(str).replace(/[&<>"']/g, match => {
+      const escapeMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+      return escapeMap[match];
+    });
   };
 
   let searchTimeout;
@@ -382,108 +576,23 @@ function setupDoctorSearch(session) {
     }
     searchClear.style.display = 'block';
 
-    const escapeHtml = (str) => {
-      if (str == null) return '';
-      return String(str).replace(/[&<>"']/g, match => {
-        const escapeMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-        return escapeMap[match];
-      });
-    };
-
-    const allPatients = db.getAll('patients') || [];
-    const labCatalog = db.getAll('labCatalog') || [];
-    const getPat = (id) => allPatients.find(p => p.id === id) || { name: 'Unknown patient', mrn: '-' };
-    const getTest = (id) => labCatalog.find(t => t.id === id) || { name: 'Unknown test' };
-
-    const patients = allPatients.filter(p => 
-      (p.name?.toLowerCase() ?? '').includes(query) || 
-      (p.mrn?.toLowerCase() ?? '').includes(query) || 
-      (p.phone?.toLowerCase() ?? '').includes(query)
-    ).slice(0, 5);
-
-    const appointments = (db.getAll('appointments') || []).filter(a => {
-      if (a.doctorId !== session.staffId) return false;
-      const pat = getPat(a.patientId);
-      return (pat.name?.toLowerCase() ?? '').includes(query) || 
-             (pat.mrn?.toLowerCase() ?? '').includes(query) || 
-             (a.type?.toLowerCase() ?? '').includes(query) || 
-             (a.status?.toLowerCase() ?? '').includes(query) || 
-             (a.date ?? '').includes(query);
-    }).slice(0, 5);
-
-    const prescriptions = (db.getAll('prescriptions') || []).filter(p => {
-      if (p.doctorId !== session.staffId) return false;
-      const pat = getPat(p.patientId);
-      const items = Array.isArray(p.items) ? p.items : [];
-      return (pat.name?.toLowerCase() ?? '').includes(query) || 
-             (p.status?.toLowerCase() ?? '').includes(query) || 
-             items.some(m => (m.name?.toLowerCase() ?? '').includes(query));
-    }).slice(0, 5);
-
-    const labOrders = (db.getAll('labOrders') || []).filter(l => {
-      if (l.doctorId !== session.staffId) return false;
-      const pat = getPat(l.patientId);
-      const test = getTest(l.testId);
-      return (pat.name?.toLowerCase() ?? '').includes(query) || 
-             (test.name?.toLowerCase() ?? '').includes(query) || 
-             (l.status?.toLowerCase() ?? '').includes(query) || 
-             (l.priority?.toLowerCase() ?? '').includes(query);
-    }).slice(0, 5);
+    const groups = config.getGroups(session, query, base, escapeHtml);
 
     let html = '';
-    items = [];
+    flatItems = [];
 
-    if (patients.length) {
-      html += `<div class="dropdown__divider" style="margin:0;"></div><div style="padding: 4px 16px; font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">Patients</div>`;
-      patients.forEach(p => {
-        items.push({ url: base + 'pages/shared/patient-profile.html?id=' + p.id });
-        html += `<a href="${items[items.length-1].url}" class="dropdown__item" style="display:flex; flex-direction:column; gap:2px; padding: 8px 16px;">
-          <div style="font-weight:500;">${escapeHtml(p.name)}</div>
-          <div style="font-size:0.75rem; color:var(--muted);">MRN: ${escapeHtml(p.mrn)}</div>
+    for (const group of groups) {
+      html += `<div class="dropdown__divider" style="margin:0;"></div><div style="padding: 4px 16px; font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">${group.label}</div>`;
+      for (const item of group.items) {
+        flatItems.push(item);
+        html += `<a href="${item.url}" class="dropdown__item" style="display:flex; flex-direction:column; gap:2px; padding: 8px 16px;">
+          <div style="font-weight:500;">${item.primary}</div>
+          ${item.secondary ? `<div style="font-size:0.75rem; color:var(--muted);">${item.secondary}</div>` : ''}
         </a>`;
-      });
+      }
     }
 
-    if (appointments.length) {
-      html += `<div class="dropdown__divider" style="margin:0;"></div><div style="padding: 4px 16px; font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">Appointments</div>`;
-      appointments.forEach(a => {
-        items.push({ url: base + 'pages/doctor/appointments.html' });
-        const pat = getPat(a.patientId);
-        html += `<a href="${items[items.length-1].url}" class="dropdown__item" style="display:flex; flex-direction:column; gap:2px; padding: 8px 16px;">
-          <div style="font-weight:500;">${escapeHtml(a.date)} · ${escapeHtml(a.time)}</div>
-          <div style="font-size:0.75rem; color:var(--muted);">${escapeHtml(pat.name)} · ${escapeHtml(a.status)}</div>
-        </a>`;
-      });
-    }
-
-    if (prescriptions.length) {
-      html += `<div class="dropdown__divider" style="margin:0;"></div><div style="padding: 4px 16px; font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">Prescriptions</div>`;
-      prescriptions.forEach(p => {
-        items.push({ url: base + 'pages/doctor/prescriptions.html' });
-        const pat = getPat(p.patientId);
-        const medItems = Array.isArray(p.items) ? p.items : [];
-        const meds = medItems.map(m => m.name).join(', ');
-        html += `<a href="${items[items.length-1].url}" class="dropdown__item" style="display:flex; flex-direction:column; gap:2px; padding: 8px 16px;">
-          <div style="font-weight:500;">${escapeHtml(pat.name)}</div>
-          <div style="font-size:0.75rem; color:var(--muted);">${escapeHtml(meds)} · ${escapeHtml(p.status)}</div>
-        </a>`;
-      });
-    }
-
-    if (labOrders.length) {
-      html += `<div class="dropdown__divider" style="margin:0;"></div><div style="padding: 4px 16px; font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">Lab Orders</div>`;
-      labOrders.forEach(l => {
-        items.push({ url: base + 'pages/doctor/lab-orders.html' });
-        const pat = getPat(l.patientId);
-        const test = getTest(l.testId);
-        html += `<a href="${items[items.length-1].url}" class="dropdown__item" style="display:flex; flex-direction:column; gap:2px; padding: 8px 16px;">
-          <div style="font-weight:500;">${escapeHtml(pat.name)}</div>
-          <div style="font-size:0.75rem; color:var(--muted);">${escapeHtml(test.name)} · ${escapeHtml(l.priority)} · ${escapeHtml(l.status)}</div>
-        </a>`;
-      });
-    }
-
-    if (items.length === 0) {
+    if (flatItems.length === 0) {
       html = `<div style="padding: 16px; text-align: center; color: var(--muted); font-size: 0.875rem;">No matching records found</div>`;
     }
 
@@ -503,19 +612,19 @@ function setupDoctorSearch(session) {
       searchInput.blur();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (items.length > 0) {
-        selectedIndex = (selectedIndex + 1) % items.length;
+      if (flatItems.length > 0) {
+        selectedIndex = (selectedIndex + 1) % flatItems.length;
         updateHighlight();
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (items.length > 0) {
-        selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+      if (flatItems.length > 0) {
+        selectedIndex = (selectedIndex - 1 + flatItems.length) % flatItems.length;
         updateHighlight();
       }
     } else if (e.key === 'Enter') {
-      if (selectedIndex >= 0 && selectedIndex < items.length) {
-        window.location.href = items[selectedIndex].url;
+      if (selectedIndex >= 0 && selectedIndex < flatItems.length) {
+        window.location.href = flatItems[selectedIndex].url;
       }
     }
   });

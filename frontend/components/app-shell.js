@@ -7,7 +7,7 @@
 
 import { guard } from '../core/guard.js';
 import { renderSidebar } from './sidebar.js';
-import { renderTopbar } from './topbar.js';
+import { renderTopbar, COLLAPSIBLE_ROLES } from './topbar.js';
 
 /**
  * Initialise the app shell.
@@ -20,8 +20,11 @@ export function initShell(allowedRoles, onReady) {
   const session = guard(allowedRoles);
   document.body.classList.add('role-' + session.role.toLowerCase());
   
-  if (session.role === 'DOCTOR' && localStorage.getItem('clinova.doctor.sidebarCollapsed') === 'true') {
-    document.body.classList.add('is-sidebar-collapsed');
+  if (COLLAPSIBLE_ROLES.includes(session.role)) {
+    const storageKey = 'clinova.' + session.role.toLowerCase() + '.sidebarCollapsed';
+    if (localStorage.getItem(storageKey) === 'true') {
+      document.body.classList.add('is-sidebar-collapsed');
+    }
   }
 
   // Build shell structure
@@ -46,7 +49,7 @@ export function initShell(allowedRoles, onReady) {
   renderSidebar(document.getElementById('sidebar'), session.role);
   renderTopbar(document.getElementById('topbar'), session);
   
-  if (session.role === 'DOCTOR' && document.body.classList.contains('is-sidebar-collapsed')) {
+  if (COLLAPSIBLE_ROLES.includes(session.role) && document.body.classList.contains('is-sidebar-collapsed')) {
       document.querySelectorAll('.sidebar .nav-item').forEach(item => {
           item.setAttribute('title', item.querySelector('span')?.textContent || '');
       });
